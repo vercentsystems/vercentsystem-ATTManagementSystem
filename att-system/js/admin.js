@@ -25,7 +25,7 @@ function fundSourceText(fs) {
 }
 
 let PROFILE = null;
-let DIVISIONS = [];
+let STATIONS = [];
 let TYPES = [];
 let EMPLOYEES = [];
 let LEVELS = [];
@@ -36,11 +36,11 @@ let SIG_FILE = null;
 const SECTIONS = [
   { id: "dashboard", icon: "📊", label: "Dashboard", title: "Dashboard", sub: "Overview of travel activity across the organization." },
   { id: "requests", icon: "🧾", label: "All Requests", title: "All Requests", sub: "Monitor every Authority to Travel request and its approval status." },
-  { id: "divisions", icon: "🏢", label: "Divisions", title: "Divisions", sub: "Manage organizational divisions." },
+  { id: "stations", icon: "🏫", label: "Official Stations", title: "Official Stations", sub: "Manage the schools/offices requests and approvers are routed by." },
   { id: "types", icon: "🗂", label: "Request Types", title: "Request Types", sub: "Manage travel request categories." },
-  { id: "levels", icon: "🪜", label: "Approval Levels", title: "Approval Levels", sub: "Configure how many approvals a division/type requires, in order." },
-  { id: "employees", icon: "👤", label: "Employees", title: "Employees", sub: "Manage employee profiles, divisions, and roles." },
-  { id: "approvers", icon: "✍️", label: "Approvers", title: "Approvers & E-Signatures", sub: "Assign approvers per division/level and maintain their e-signatures." },
+  { id: "levels", icon: "🪜", label: "Approval Levels", title: "Approval Levels", sub: "Configure how many approvals an official station/type requires, in order." },
+  { id: "employees", icon: "👤", label: "Employees", title: "Employees", sub: "Manage employee profiles, official stations, and roles." },
+  { id: "approvers", icon: "✍️", label: "Approvers", title: "Approvers & E-Signatures", sub: "Assign approvers per official station/level and maintain their e-signatures." },
 ];
 
 init();
@@ -73,7 +73,7 @@ async function init() {
   wireNav();
   wireModals();
 
-  await Promise.all([loadDivisions(), loadTypes(), loadEmployees()]);
+  await Promise.all([loadStations(), loadTypes(), loadEmployees()]);
   await loadLevels();
   await loadApprovers();
   await loadAllOrders();
@@ -113,7 +113,7 @@ function wireModals() {
   document.getElementById("approver-cancel").addEventListener("click", () => closeModal("overlay-approver"));
   document.getElementById("rq-close").addEventListener("click", () => closeModal("overlay-request"));
 
-  document.getElementById("btn-add-division").addEventListener("click", () => openDivisionForm());
+  document.getElementById("btn-add-station").addEventListener("click", () => openStationForm());
   document.getElementById("btn-add-type").addEventListener("click", () => openTypeForm());
   document.getElementById("btn-add-level").addEventListener("click", () => openLevelForm());
   document.getElementById("btn-add-approver").addEventListener("click", () => openApproverForm());
@@ -121,7 +121,7 @@ function wireModals() {
   document.getElementById("approver-save").addEventListener("click", saveApprover);
   document.getElementById("ap-sig-file").addEventListener("change", previewSigFile);
   document.getElementById("rq-filter-status").addEventListener("change", renderAllOrders);
-  document.getElementById("rq-filter-division").addEventListener("change", renderAllOrders);
+  document.getElementById("rq-filter-station").addEventListener("change", renderAllOrders);
 }
 
 /* =========================================================================
@@ -143,12 +143,12 @@ function renderDashboard() {
 
   const byDiv = {};
   ALL_ORDERS.filter(o => ["submitted", "pending"].includes(o.status)).forEach(o => {
-    const name = DIVISIONS.find(d => d.id === o.division_id)?.name || "Unassigned";
+    const name = STATIONS.find(d => d.id === o.official_station_id)?.name || "Unassigned";
     byDiv[name] = (byDiv[name] || 0) + 1;
   });
   const divRows = Object.entries(byDiv).sort((a, b) => b[1] - a[1]);
   qs("#tbl-div-pending tbody").innerHTML = divRows.length
-    ? divRows.map(([name, n]) => `<tr><td data-label="Division">${escapeHtml(name)}</td><td data-label="Pending">${n}</td></tr>`).join("")
+    ? divRows.map(([name, n]) => `<tr><td data-label="Official Station">${escapeHtml(name)}</td><td data-label="Pending">${n}</td></tr>`).join("")
     : `<tr class="empty-row"><td colspan="2">No pending requests.</td></tr>`;
 
   loadApproverActivitySummary();
@@ -182,21 +182,21 @@ async function loadApproverActivitySummary() {
 async function loadAllOrders() {
   const { data, error } = await sb
     .from("travel_orders")
-    .select("*, employees(full_name), divisions(name)")
+    .select("*, employees(full_name), official_stations(name)")
     .order("created_at", { ascending: false });
   if (error) { toast("Failed to load requests: " + error.message, "bad"); return; }
   ALL_ORDERS = data || [];
 
-  const divSel = document.getElementById("rq-filter-division");
-  divSel.innerHTML = `<option value="">All divisions</option>` + DIVISIONS.map(d => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join("");
+  const divSel = document.getElementById("rq-filter-station");
+  divSel.innerHTML = `<option value="">All official stations</option>` + STATIONS.map(d => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join("");
 
   renderAllOrders();
 }
 
 function renderAllOrders() {
   const status = document.getElementById("rq-filter-status").value;
-  const division = document.getElementById("rq-filter-division").value;
-  const rows = ALL_ORDERS.filter(o => (!status || o.status === status) && (!division || o.division_id === division));
+  const station = document.getElementById("rq-filter-station").value;
+  const rows = ALL_ORDERS.filter(o => (!status || o.status === status) && (!station || o.official_station_id === station));
   const tbody = qs("#tbl-all-requests tbody");
 
   if (!rows.length) {
@@ -207,7 +207,7 @@ function renderAllOrders() {
     <tr>
       <td data-label="Control No.">${o.control_no || "<span class='muted'>Draft</span>"}</td>
       <td data-label="Employee">${escapeHtml(o.employees?.full_name || "—")}</td>
-      <td data-label="Division">${escapeHtml(o.divisions?.name || "—")}</td>
+      <td data-label="Official Station">${escapeHtml(o.official_stations?.name || "—")}</td>
       <td data-label="Destination">${escapeHtml(o.destination)}</td>
       <td data-label="Dates">${fmtDate(o.travel_date_from)} – ${fmtDate(o.travel_date_to)}</td>
       <td data-label="Status">${statusBadge(o.status)}</td>
@@ -235,7 +235,7 @@ async function viewRequest(id) {
   body.innerHTML = `
     <div class="form-grid">
       <div class="field"><label>Employee</label><div>${escapeHtml(o.employees?.full_name || "—")}</div></div>
-      <div class="field"><label>Division</label><div>${escapeHtml(o.divisions?.name || "—")}</div></div>
+      <div class="field"><label>Official Station</label><div>${escapeHtml(o.official_stations?.name || "—")}</div></div>
       <div class="field"><label>Status</label><div>${statusBadge(o.status)}</div></div>
       <div class="field"><label>Filing Date</label><div>${fmtDate(o.filing_date)}</div></div>
       <div class="field full"><label>Destination</label><div>${escapeHtml(o.destination)}</div></div>
@@ -256,39 +256,39 @@ async function viewRequest(id) {
 }
 
 /* =========================================================================
-   DIVISIONS
+   OFFICIAL STATIONS
    ========================================================================= */
-async function loadDivisions() {
-  const { data, error } = await sb.from("divisions").select("*").order("name");
-  if (error) { toast("Failed to load divisions: " + error.message, "bad"); return; }
-  DIVISIONS = data || [];
-  renderDivisions();
-  fillDivisionSelects();
+async function loadStations() {
+  const { data, error } = await sb.from("official_stations").select("*").order("name");
+  if (error) { toast("Failed to load official stations: " + error.message, "bad"); return; }
+  STATIONS = data || [];
+  renderStations();
+  fillStationSelects();
 }
-function renderDivisions() {
-  const tbody = qs("#tbl-divisions tbody");
-  tbody.innerHTML = DIVISIONS.length ? DIVISIONS.map(d => `
+function renderStations() {
+  const tbody = qs("#tbl-stations tbody");
+  tbody.innerHTML = STATIONS.length ? STATIONS.map(d => `
     <tr>
       <td data-label="Code">${escapeHtml(d.code)}</td>
       <td data-label="Name">${escapeHtml(d.name)}</td>
       <td data-label="Status">${d.status === "active" ? "<span class='badge badge-approved'>Active</span>" : "<span class='badge badge-cancelled'>Inactive</span>"}</td>
       <td data-label="Actions" class="actions"><button class="btn btn-ghost btn-sm" data-edit="${d.id}">Edit</button></td>
-    </tr>`).join("") : `<tr class="empty-row"><td colspan="4">No divisions yet.</td></tr>`;
-  qsa("[data-edit]", tbody).forEach(b => b.addEventListener("click", () => openDivisionForm(b.dataset.edit)));
+    </tr>`).join("") : `<tr class="empty-row"><td colspan="4">No official stations yet.</td></tr>`;
+  qsa("[data-edit]", tbody).forEach(b => b.addEventListener("click", () => openStationForm(b.dataset.edit)));
 }
-function fillDivisionSelects() {
-  const opts = DIVISIONS.map(d => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join("");
-  const emDiv = document.getElementById("em-division"); if (emDiv) emDiv.innerHTML = opts;
-  const apDiv = document.getElementById("ap-division"); if (apDiv) apDiv.innerHTML = opts;
+function fillStationSelects() {
+  const opts = STATIONS.map(d => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join("");
+  const emDiv = document.getElementById("em-station"); if (emDiv) emDiv.innerHTML = opts;
+  const apDiv = document.getElementById("ap-station"); if (apDiv) apDiv.innerHTML = opts;
 }
 
-function openDivisionForm(id) {
-  const d = DIVISIONS.find(x => x.id === id);
-  document.getElementById("simple-title").textContent = d ? "Edit Division" : "Add Division";
+function openStationForm(id) {
+  const d = STATIONS.find(x => x.id === id);
+  document.getElementById("simple-title").textContent = d ? "Edit Official Station" : "Add Official Station";
   document.getElementById("simple-body").innerHTML = `
     <input type="hidden" id="sv-id" value="${d?.id || ""}">
     <div class="field" style="margin-bottom:12px"><label>Code</label><input type="text" id="sv-code" value="${escapeHtml(d?.code || "")}" placeholder="e.g. FIN"></div>
-    <div class="field" style="margin-bottom:12px"><label>Name</label><input type="text" id="sv-name" value="${escapeHtml(d?.name || "")}" placeholder="e.g. Finance Division"></div>
+    <div class="field" style="margin-bottom:12px"><label>Name</label><input type="text" id="sv-name" value="${escapeHtml(d?.name || "")}" placeholder="e.g. Banila Elementary School"></div>
     <div class="field"><label>Status</label>
       <select id="sv-status"><option value="active" ${(!d || d.status === "active") ? "selected" : ""}>Active</option><option value="inactive" ${d?.status === "inactive" ? "selected" : ""}>Inactive</option></select>
     </div>`;
@@ -300,9 +300,9 @@ function openDivisionForm(id) {
     };
     if (!payload.code || !payload.name) throw new Error("Code and name are required.");
     const id2 = document.getElementById("sv-id").value;
-    if (id2) { const { error } = await sb.from("divisions").update(payload).eq("id", id2); if (error) throw error; }
-    else { const { error } = await sb.from("divisions").insert(payload); if (error) throw error; }
-    await loadDivisions();
+    if (id2) { const { error } = await sb.from("official_stations").update(payload).eq("id", id2); if (error) throw error; }
+    else { const { error } = await sb.from("official_stations").insert(payload); if (error) throw error; }
+    await loadStations();
     await loadLevels(); await loadApprovers(); await loadAllOrders(); renderDashboard();
   });
   openModal("overlay-simple");
@@ -364,7 +364,7 @@ function openTypeForm(id) {
    APPROVAL LEVELS
    ========================================================================= */
 async function loadLevels() {
-  const { data, error } = await sb.from("approval_levels").select("*, divisions(name), request_types(name)").order("division_id").order("level_no");
+  const { data, error } = await sb.from("approval_levels").select("*, official_stations(name), request_types(name)").order("official_station_id").order("level_no");
   if (error) { toast("Failed to load approval levels: " + error.message, "bad"); return; }
   LEVELS = data || [];
   renderLevels();
@@ -373,7 +373,7 @@ function renderLevels() {
   const tbody = qs("#tbl-levels tbody");
   tbody.innerHTML = LEVELS.length ? LEVELS.map(l => `
     <tr>
-      <td data-label="Division">${escapeHtml(l.divisions?.name || "—")}</td>
+      <td data-label="Official Station">${escapeHtml(l.official_stations?.name || "—")}</td>
       <td data-label="Request Type">${escapeHtml(l.request_types?.name || "All types")}</td>
       <td data-label="Level">${l.level_no}</td>
       <td data-label="Label">${escapeHtml(l.label)}</td>
@@ -389,10 +389,10 @@ function openLevelForm(id) {
   document.getElementById("simple-title").textContent = l ? "Edit Approval Level" : "Add Approval Level";
   document.getElementById("simple-body").innerHTML = `
     <input type="hidden" id="sv-id" value="${l?.id || ""}">
-    <div class="field" style="margin-bottom:12px"><label>Division</label><select id="lv-division">${DIVISIONS.map(d => `<option value="${d.id}" ${l?.division_id === d.id ? "selected" : ""}>${escapeHtml(d.name)}</option>`).join("")}</select></div>
+    <div class="field" style="margin-bottom:12px"><label>Official Station</label><select id="lv-station">${STATIONS.map(d => `<option value="${d.id}" ${l?.official_station_id === d.id ? "selected" : ""}>${escapeHtml(d.name)}</option>`).join("")}</select></div>
     <div class="field" style="margin-bottom:12px"><label>Request Type</label><select id="lv-type"></select></div>
     <div class="field" style="margin-bottom:12px"><label>Level No.</label><input type="number" id="sv-level" min="1" value="${l?.level_no || 1}"></div>
-    <div class="field" style="margin-bottom:12px"><label>Label</label><input type="text" id="sv-label" value="${escapeHtml(l?.label || "")}" placeholder="e.g. Division Chief"></div>
+    <div class="field" style="margin-bottom:12px"><label>Label</label><input type="text" id="sv-label" value="${escapeHtml(l?.label || "")}" placeholder="e.g. School Head"></div>
     <div class="field" style="margin-bottom:12px"><label>Effective Date</label><input type="date" id="sv-effective" value="${l?.effective_date || new Date().toISOString().slice(0, 10)}"></div>
     <div class="field"><label>Status</label>
       <select id="sv-status"><option value="active" ${(!l || l.status === "active") ? "selected" : ""}>Active</option><option value="inactive" ${l?.status === "inactive" ? "selected" : ""}>Inactive</option></select>
@@ -402,14 +402,14 @@ function openLevelForm(id) {
 
   bindSimpleSave(async () => {
     const payload = {
-      division_id: document.getElementById("lv-division").value,
+      official_station_id: document.getElementById("lv-station").value,
       request_type_id: document.getElementById("lv-type").value || null,
       level_no: parseInt(document.getElementById("sv-level").value, 10),
       label: document.getElementById("sv-label").value.trim(),
       effective_date: document.getElementById("sv-effective").value,
       status: document.getElementById("sv-status").value,
     };
-    if (!payload.division_id || !payload.level_no || !payload.label) throw new Error("Division, level number, and label are required.");
+    if (!payload.official_station_id || !payload.level_no || !payload.label) throw new Error("Official station, level number, and label are required.");
     const id2 = document.getElementById("sv-id").value;
     if (id2) { const { error } = await sb.from("approval_levels").update(payload).eq("id", id2); if (error) throw error; }
     else { const { error } = await sb.from("approval_levels").insert(payload); if (error) throw error; }
@@ -440,7 +440,7 @@ function bindSimpleSave(handler) {
    EMPLOYEES
    ========================================================================= */
 async function loadEmployees() {
-  const { data, error } = await sb.from("employees").select("*, divisions(name)").order("full_name");
+  const { data, error } = await sb.from("employees").select("*, official_stations(name)").order("full_name");
   if (error) { toast("Failed to load employees: " + error.message, "bad"); return; }
   EMPLOYEES = data || [];
   renderEmployees();
@@ -452,7 +452,7 @@ function renderEmployees() {
     <tr>
       <td data-label="Name">${escapeHtml(e.full_name)}</td>
       <td data-label="Employee No.">${escapeHtml(e.employee_no || "—")}</td>
-      <td data-label="Division">${escapeHtml(e.divisions?.name || "Unassigned")}</td>
+      <td data-label="Official Station">${escapeHtml(e.official_stations?.name || "Unassigned")}</td>
       <td data-label="Role">${escapeHtml(e.role)}</td>
       <td data-label="Status">${e.status === "active" ? "<span class='badge badge-approved'>Active</span>" : "<span class='badge badge-cancelled'>Inactive</span>"}</td>
       <td data-label="Actions" class="actions"><button class="btn btn-ghost btn-sm" data-edit="${e.id}">Edit</button></td>
@@ -471,8 +471,7 @@ function openEmployeeForm(id) {
   document.getElementById("em-name").value = e.full_name;
   document.getElementById("em-empno").value = e.employee_no || "";
   document.getElementById("em-position").value = e.position || "";
-  document.getElementById("em-station").value = e.official_station || "";
-  document.getElementById("em-division").value = e.division_id || "";
+  document.getElementById("em-station").value = e.official_station_id || "";
   document.getElementById("em-role").value = e.role;
   document.getElementById("em-status").value = e.status;
   openModal("overlay-employee");
@@ -483,8 +482,7 @@ async function saveEmployee() {
   const payload = {
     employee_no: document.getElementById("em-empno").value.trim() || null,
     position: document.getElementById("em-position").value.trim(),
-    official_station: document.getElementById("em-station").value.trim(),
-    division_id: document.getElementById("em-division").value || null,
+    official_station_id: document.getElementById("em-station").value || null,
     role: document.getElementById("em-role").value,
     status: document.getElementById("em-status").value,
   };
@@ -502,7 +500,7 @@ async function saveEmployee() {
    APPROVERS + E-SIGNATURES
    ========================================================================= */
 async function loadApprovers() {
-  const { data, error } = await sb.from("approvers").select("*, employees(full_name), divisions(name), request_types(name)").order("division_id").order("level_no");
+  const { data, error } = await sb.from("approvers").select("*, employees(full_name), official_stations(name), request_types(name)").order("official_station_id").order("level_no");
   if (error) { toast("Failed to load approvers: " + error.message, "bad"); return; }
   APPROVERS = data || [];
   renderApprovers();
@@ -512,7 +510,7 @@ function renderApprovers() {
   tbody.innerHTML = APPROVERS.length ? APPROVERS.map(a => `
     <tr>
       <td data-label="Approver">${escapeHtml(a.employees?.full_name || "—")}</td>
-      <td data-label="Division">${escapeHtml(a.divisions?.name || "—")}</td>
+      <td data-label="Official Station">${escapeHtml(a.official_stations?.name || "—")}</td>
       <td data-label="Type">${escapeHtml(a.request_types?.name || "All types")}</td>
       <td data-label="Level">${a.level_no}</td>
       <td data-label="Position">${escapeHtml(a.position_title || "—")}</td>
@@ -528,10 +526,10 @@ function openApproverForm(id) {
   document.getElementById("approver-title").textContent = a ? "Edit Approver Assignment" : "Assign Approver";
   document.getElementById("ap-id").value = a?.id || "";
   fillEmployeeSelect();
-  fillDivisionSelects();
+  fillStationSelects();
   fillTypeSelects();
   document.getElementById("ap-employee").value = a?.employee_id || "";
-  document.getElementById("ap-division").value = a?.division_id || "";
+  document.getElementById("ap-station").value = a?.official_station_id || "";
   document.getElementById("ap-type").value = a?.request_type_id || "";
   document.getElementById("ap-level").value = a?.level_no || 1;
   document.getElementById("ap-position").value = a?.position_title || "";
@@ -560,15 +558,15 @@ async function saveApprover() {
   const id = document.getElementById("ap-id").value;
   const payload = {
     employee_id: document.getElementById("ap-employee").value,
-    division_id: document.getElementById("ap-division").value,
+    official_station_id: document.getElementById("ap-station").value,
     request_type_id: document.getElementById("ap-type").value || null,
     level_no: parseInt(document.getElementById("ap-level").value, 10),
     position_title: document.getElementById("ap-position").value.trim(),
     effective_date: document.getElementById("ap-effective").value,
     status: document.getElementById("ap-status").value,
   };
-  if (!payload.employee_id || !payload.division_id || !payload.level_no) {
-    toast("Employee, division, and level number are required.", "bad");
+  if (!payload.employee_id || !payload.official_station_id || !payload.level_no) {
+    toast("Employee, official station, and level number are required.", "bad");
     return;
   }
 

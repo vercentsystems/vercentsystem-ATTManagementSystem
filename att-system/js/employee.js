@@ -122,7 +122,7 @@ function resetForm() {
   document.getElementById("f-filing-date").value = new Date().toISOString().slice(0, 10);
   document.getElementById("f-employee-name").value = PROFILE.full_name;
   document.getElementById("f-position").value = PROFILE.position || "";
-  document.getElementById("f-station").value = PROFILE.official_station || "";
+  document.getElementById("f-station").value = PROFILE.official_stations?.name || "Not yet assigned";
   document.getElementById("f-companions").innerHTML = "";
   document.querySelector('input[name="f-travel-on"][value="official_business"]').checked = true;
 }
@@ -199,7 +199,7 @@ function collectCompanions() {
 }
 
 function validateForm() {
-  const required = ["f-filing-date", "f-position", "f-station", "f-destination", "f-date-from", "f-date-to", "f-purpose"];
+  const required = ["f-filing-date", "f-position", "f-destination", "f-date-from", "f-date-to", "f-purpose"];
   for (const id of required) {
     const el = document.getElementById(id);
     if (!el.value) { el.focus(); toast("Please complete all required fields.", "bad"); return false; }
@@ -218,7 +218,7 @@ async function saveRequest(targetStatus) {
 
   const payload = {
     employee_id: PROFILE.id,
-    division_id: PROFILE.division_id,
+    official_station_id: PROFILE.official_station_id,
     request_type_id: document.getElementById("f-request-type").value || null,
     filing_date: document.getElementById("f-filing-date").value,
     position: document.getElementById("f-position").value.trim(),
@@ -250,8 +250,8 @@ async function saveRequest(targetStatus) {
     with_registration_fee: document.getElementById("f-reg-fee").checked,
   };
 
-  if (!payload.division_id) {
-    toast("Your account has no division assigned yet. Contact your administrator.", "bad");
+  if (!payload.official_station_id) {
+    toast("Your account has no Official Station assigned yet. Contact your administrator.", "bad");
     return;
   }
 
@@ -285,7 +285,7 @@ async function saveRequest(targetStatus) {
   }
 }
 
-// Identifies division -> resolves approval levels -> assigns level 1 approver -> marks submitted/pending
+// Identifies official station -> resolves approval levels -> assigns level 1 approver -> marks submitted/pending
 async function submitForApproval(orderId) {
   const { data: order, error: oErr } = await sb.from("travel_orders").select("*").eq("id", orderId).single();
   if (oErr) throw oErr;
@@ -293,7 +293,7 @@ async function submitForApproval(orderId) {
   const { data: levels, error: lErr } = await sb
     .from("approval_levels")
     .select("*")
-    .eq("division_id", order.division_id)
+    .eq("official_station_id", order.official_station_id)
     .eq("status", "active")
     .or(`request_type_id.eq.${order.request_type_id},request_type_id.is.null`)
     .order("level_no");

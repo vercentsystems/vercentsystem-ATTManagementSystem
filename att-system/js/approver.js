@@ -24,7 +24,7 @@ function fundSourceText(fs) {
 }
 
 let PROFILE = null;
-let MY_APPROVER_ROWS = [];   // rows in `approvers` for this person (one per division/level/type)
+let MY_APPROVER_ROWS = [];   // rows in `approvers` for this person (one per official station/level/type)
 let PENDING = [];
 let HISTORY = [];
 let CURRENT_ORDER = null;
@@ -77,7 +77,7 @@ function wireTabs() {
 async function loadApproverAssignments() {
   const { data, error } = await sb
     .from("approvers")
-    .select("*, divisions(name)")
+    .select("*, official_stations(name)")
     .eq("employee_id", PROFILE.id)
     .eq("status", "active");
   if (error) { toast("Failed to load your approver assignments: " + error.message, "bad"); return; }
@@ -95,17 +95,17 @@ async function loadPending() {
     return;
   }
 
-  const divisionIds = [...new Set(MY_APPROVER_ROWS.map(a => a.division_id))];
+  const officialStationIds = [...new Set(MY_APPROVER_ROWS.map(a => a.official_station_id))];
   const { data, error } = await sb
     .from("travel_orders")
-    .select("*, employees(full_name), divisions(name)")
-    .in("division_id", divisionIds)
+    .select("*, employees(full_name), official_stations(name)")
+    .in("official_station_id", officialStationIds)
     .in("status", ["submitted", "pending"])
     .order("submitted_at", { ascending: true });
 
   if (error) { toast("Failed to load pending requests: " + error.message, "bad"); return; }
 
-  // Keep only orders whose current_level matches one of my assignments for that division/type
+  // Keep only orders whose current_level matches one of my assignments for that official station/type
   PENDING = (data || []).filter(o => matchesMyAssignment(o));
 
   document.getElementById("st-pending").textContent = PENDING.length;
@@ -119,7 +119,7 @@ async function loadPending() {
     <tr>
       <td data-label="Control No.">${o.control_no}</td>
       <td data-label="Employee">${escapeHtml(o.employees?.full_name || "—")}</td>
-      <td data-label="Division">${escapeHtml(o.divisions?.name || "—")}</td>
+      <td data-label="Official Station">${escapeHtml(o.official_stations?.name || "—")}</td>
       <td data-label="Destination">${escapeHtml(o.destination)}</td>
       <td data-label="Travel Dates">${fmtDate(o.travel_date_from)} – ${fmtDate(o.travel_date_to)}</td>
       <td data-label="Level">Level ${o.current_level} of ${o.max_level}</td>
@@ -134,7 +134,7 @@ async function loadPending() {
 
 function matchesMyAssignment(order) {
   return MY_APPROVER_ROWS.some(a =>
-    a.division_id === order.division_id &&
+    a.official_station_id === order.official_station_id &&
     a.level_no === order.current_level &&
     (a.request_type_id === null || a.request_type_id === order.request_type_id)
   );
@@ -142,7 +142,7 @@ function matchesMyAssignment(order) {
 
 function myAssignmentFor(order) {
   return MY_APPROVER_ROWS.find(a =>
-    a.division_id === order.division_id &&
+    a.official_station_id === order.official_station_id &&
     a.level_no === order.current_level &&
     (a.request_type_id === null || a.request_type_id === order.request_type_id)
   );
@@ -201,7 +201,7 @@ async function openReview(id) {
   document.getElementById("review-body").innerHTML = `
     <div class="form-grid">
       <div class="field"><label>Employee</label><div>${escapeHtml(o.employees?.full_name || "—")}</div></div>
-      <div class="field"><label>Division</label><div>${escapeHtml(o.divisions?.name || "—")}</div></div>
+      <div class="field"><label>Official Station</label><div>${escapeHtml(o.official_stations?.name || "—")}</div></div>
       <div class="field"><label>Position</label><div>${escapeHtml(o.position)}</div></div>
       <div class="field"><label>Official Station</label><div>${escapeHtml(o.official_station)}</div></div>
       <div class="field full"><label>Destination</label><div>${escapeHtml(o.destination)}</div></div>

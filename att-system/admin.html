@@ -31,10 +31,10 @@
         </div>
 
         <div class="card">
-          <div class="card-head"><h3>Pending Approvals per Division</h3></div>
+          <div class="card-head"><h3>Pending Approvals per Official Station</h3></div>
           <div class="table-wrap">
             <table class="data cards" id="tbl-div-pending">
-              <thead><tr><th>Division</th><th>Pending Requests</th></tr></thead>
+              <thead><tr><th>Official Station</th><th>Pending Requests</th></tr></thead>
               <tbody><tr class="empty-row"><td colspan="2">Loading…</td></tr></tbody>
             </table>
           </div>
@@ -63,24 +63,24 @@
                 <option value="pending">Pending</option><option value="returned">Returned</option>
                 <option value="approved">Approved</option><option value="rejected">Rejected</option>
               </select>
-              <select id="rq-filter-division" class="btn btn-ghost btn-sm" style="min-height:36px"><option value="">All divisions</option></select>
+              <select id="rq-filter-station" class="btn btn-ghost btn-sm" style="min-height:36px"><option value="">All official stations</option></select>
             </div>
           </div>
           <div class="table-wrap">
             <table class="data cards" id="tbl-all-requests">
-              <thead><tr><th>Control No.</th><th>Employee</th><th>Division</th><th>Destination</th><th>Dates</th><th>Status</th><th>Level</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Control No.</th><th>Employee</th><th>Official Station</th><th>Destination</th><th>Dates</th><th>Status</th><th>Level</th><th>Actions</th></tr></thead>
               <tbody><tr class="empty-row"><td colspan="8">Loading…</td></tr></tbody>
             </table>
           </div>
         </div>
       </section>
 
-      <!-- ============================= DIVISIONS ============================= -->
-      <section id="sec-divisions" class="sec" style="display:none">
+      <!-- ============================= OFFICIAL STATIONS ============================= -->
+      <section id="sec-stations" class="sec" style="display:none">
         <div class="card">
-          <div class="card-head"><h3>Divisions</h3><button class="btn btn-gold btn-sm" id="btn-add-division">+ Add Division</button></div>
+          <div class="card-head"><h3>Official Stations</h3><button class="btn btn-gold btn-sm" id="btn-add-station">+ Add Official Station</button></div>
           <div class="table-wrap">
-            <table class="data cards" id="tbl-divisions">
+            <table class="data cards" id="tbl-stations">
               <thead><tr><th>Code</th><th>Name</th><th>Status</th><th>Actions</th></tr></thead>
               <tbody><tr class="empty-row"><td colspan="4">Loading…</td></tr></tbody>
             </table>
@@ -105,10 +105,10 @@
       <section id="sec-levels" class="sec" style="display:none">
         <div class="card">
           <div class="card-head"><h3>Approval Levels</h3><button class="btn btn-gold btn-sm" id="btn-add-level">+ Add Approval Level</button></div>
-          <p class="muted" style="margin-top:-6px">Defines how many sequential approval levels a division / request type requires.</p>
+          <p class="muted" style="margin-top:-6px">Defines how many sequential approval levels an official station / request type requires.</p>
           <div class="table-wrap">
             <table class="data cards" id="tbl-levels">
-              <thead><tr><th>Division</th><th>Request Type</th><th>Level</th><th>Label</th><th>Effective</th><th>Status</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Official Station</th><th>Request Type</th><th>Level</th><th>Label</th><th>Effective</th><th>Status</th><th>Actions</th></tr></thead>
               <tbody><tr class="empty-row"><td colspan="7">Loading…</td></tr></tbody>
             </table>
           </div>
@@ -119,10 +119,10 @@
       <section id="sec-employees" class="sec" style="display:none">
         <div class="card">
           <div class="card-head"><h3>Employees</h3></div>
-          <p class="muted" style="margin-top:-6px">Employees self-register via Sign Up. Assign their division, position, and role here.</p>
+          <p class="muted" style="margin-top:-6px">Employees self-register via Sign Up. Assign their official station, position, and role here.</p>
           <div class="table-wrap">
             <table class="data cards" id="tbl-employees">
-              <thead><tr><th>Name</th><th>Employee No.</th><th>Division</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Name</th><th>Employee No.</th><th>Official Station</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
               <tbody><tr class="empty-row"><td colspan="6">Loading…</td></tr></tbody>
             </table>
           </div>
@@ -136,7 +136,7 @@
           <p class="muted" style="margin-top:-6px">Configurable approval routing — no approver is hard-coded in the application.</p>
           <div class="table-wrap">
             <table class="data cards" id="tbl-approvers">
-              <thead><tr><th>Approver</th><th>Division</th><th>Type</th><th>Level</th><th>Position (as printed)</th><th>Signature</th><th>Status</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Approver</th><th>Official Station</th><th>Type</th><th>Level</th><th>Position (as printed)</th><th>Signature</th><th>Status</th><th>Actions</th></tr></thead>
               <tbody><tr class="empty-row"><td colspan="8">Loading…</td></tr></tbody>
             </table>
           </div>
@@ -147,7 +147,7 @@
   </main>
 </div>
 
-<!-- ============================ Generic small modal (division/type/level) ============================ -->
+<!-- ============================ Generic small modal (official station/type/level) ============================ -->
 <div class="overlay" id="overlay-simple">
   <div class="modal">
     <div class="modal-head"><h3 id="simple-title">Add</h3><button class="modal-close" id="simple-close">&times;</button></div>
@@ -168,8 +168,7 @@
       <div class="field" style="margin-bottom:12px"><label>Full Name</label><input type="text" id="em-name" disabled></div>
       <div class="field" style="margin-bottom:12px"><label>Employee No.</label><input type="text" id="em-empno"></div>
       <div class="field" style="margin-bottom:12px"><label>Position</label><input type="text" id="em-position"></div>
-      <div class="field" style="margin-bottom:12px"><label>Official Station</label><input type="text" id="em-station"></div>
-      <div class="field" style="margin-bottom:12px"><label>Division</label><select id="em-division"></select></div>
+      <div class="field" style="margin-bottom:12px"><label>Official Station</label><select id="em-station"></select></div>
       <div class="field" style="margin-bottom:12px"><label>Role</label>
         <select id="em-role"><option value="employee">Employee</option><option value="approver">Approver</option><option value="admin">Administrator</option></select>
       </div>
@@ -189,10 +188,10 @@
     <div class="modal-body">
       <input type="hidden" id="ap-id">
       <div class="field" style="margin-bottom:12px"><label>Employee (Approver)</label><select id="ap-employee"></select></div>
-      <div class="field" style="margin-bottom:12px"><label>Division</label><select id="ap-division"></select></div>
+      <div class="field" style="margin-bottom:12px"><label>Official Station</label><select id="ap-station"></select></div>
       <div class="field" style="margin-bottom:12px"><label>Request Type <span class="muted">(optional — blank = all types)</span></label><select id="ap-type"><option value="">All types</option></select></div>
       <div class="field" style="margin-bottom:12px"><label>Approval Level No.</label><input type="number" id="ap-level" min="1" value="1"></div>
-      <div class="field" style="margin-bottom:12px"><label>Position Title (as printed on report)</label><input type="text" id="ap-position" placeholder="e.g. Division Chief"></div>
+      <div class="field" style="margin-bottom:12px"><label>Position Title (as printed on report)</label><input type="text" id="ap-position" placeholder="e.g. School Head"></div>
       <div class="field" style="margin-bottom:12px"><label>Effective Date</label><input type="date" id="ap-effective"></div>
       <div class="field" style="margin-bottom:12px"><label>Status</label><select id="ap-status"><option value="active">Active</option><option value="inactive">Inactive</option></select></div>
       <div class="field">

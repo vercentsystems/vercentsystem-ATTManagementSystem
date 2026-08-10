@@ -65,7 +65,7 @@ export async function requireRole(allowedRoles) {
   }
   let { data: profile, error } = await sb
     .from("employees")
-    .select("*, divisions(name, code)")
+    .select("*, official_stations(name, code)")
     .eq("id", session.user.id)
     .maybeSingle();
 
@@ -86,7 +86,7 @@ export async function requireRole(allowedRoles) {
     if (!healErr) {
       ({ data: profile, error } = await sb
         .from("employees")
-        .select("*, divisions(name, code)")
+        .select("*, official_stations(name, code)")
         .eq("id", session.user.id)
         .maybeSingle());
     }

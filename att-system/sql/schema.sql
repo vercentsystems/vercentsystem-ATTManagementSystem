@@ -11,7 +11,7 @@ create extension if not exists "pgcrypto";
 -- ---------------------------------------------------------------------------
 -- 1. DIVISIONS
 -- ---------------------------------------------------------------------------
-create table if not exists divisions (
+create table if not exists official_stations (
   id            uuid primary key default gen_random_uuid(),
   code          text not null unique,
   name          text not null,
@@ -30,8 +30,7 @@ create table if not exists employees (
   employee_no       text unique,
   full_name         text not null,
   position          text not null default '',
-  division_id       uuid references divisions(id),
-  official_station  text not null default '',
+  official_station_id uuid references official_stations(id),  -- routes approvals: assign each employee to their school/office
   email             text not null,
   role              text not null default 'employee' check (role in ('employee','approver','admin')),
   status            text not null default 'active' check (status in ('active','inactive')),
@@ -50,31 +49,31 @@ create table if not exists request_types (
 );
 
 -- ---------------------------------------------------------------------------
--- 4. APPROVAL LEVELS (defines how many sequential levels a division /
---    request type combination requires, e.g. Level 1 = Division Chief,
+-- 4. APPROVAL LEVELS (defines how many sequential levels an official station /
+--    request type combination requires, e.g. Level 1 = School Head,
 --    Level 2 = Regional Director)
 -- ---------------------------------------------------------------------------
 create table if not exists approval_levels (
   id                uuid primary key default gen_random_uuid(),
-  division_id       uuid not null references divisions(id),
+  official_station_id       uuid not null references official_stations(id),
   request_type_id   uuid references request_types(id), -- null = applies to all types
   level_no          int not null check (level_no > 0),
-  label             text not null,                       -- e.g. "Division Chief"
+  label             text not null,                       -- e.g. "School Head"
   status            text not null default 'active' check (status in ('active','inactive')),
   effective_date    date not null default current_date,
   created_at        timestamptz not null default now(),
-  unique (division_id, request_type_id, level_no)
+  unique (official_station_id, request_type_id, level_no)
 );
 
 -- ---------------------------------------------------------------------------
--- 5. APPROVERS (assigns a person to a division/request-type/level, with
+-- 5. APPROVERS (assigns a person to an official station/request-type/level, with
 --    their maintained e-signature). Fully admin-configurable — never
 --    hard-coded in application logic.
 -- ---------------------------------------------------------------------------
 create table if not exists approvers (
   id                uuid primary key default gen_random_uuid(),
   employee_id       uuid not null references employees(id),
-  division_id       uuid not null references divisions(id),
+  official_station_id       uuid not null references official_stations(id),
   request_type_id   uuid references request_types(id),   -- null = all types
   level_no          int not null check (level_no > 0),
   position_title    text not null default '',             -- as printed on the report
@@ -85,7 +84,7 @@ create table if not exists approvers (
 );
 
 create index if not exists idx_approvers_lookup
-  on approvers (division_id, level_no, status);
+  on approvers (official_station_id, level_no, status);
 
 -- ---------------------------------------------------------------------------
 -- 6. TRAVEL ORDERS (the Authority to Travel requests)
@@ -94,7 +93,7 @@ create table if not exists travel_orders (
   id                  uuid primary key default gen_random_uuid(),
   control_no          text unique,                         -- assigned on submit
   employee_id         uuid not null references employees(id),
-  division_id         uuid not null references divisions(id),
+  official_station_id         uuid not null references official_stations(id),
   request_type_id     uuid references request_types(id),
 
   filing_date         date not null default current_date,
@@ -143,7 +142,7 @@ create table if not exists travel_orders (
 
 create index if not exists idx_travel_orders_employee on travel_orders(employee_id);
 create index if not exists idx_travel_orders_status on travel_orders(status);
-create index if not exists idx_travel_orders_division on travel_orders(division_id);
+create index if not exists idx_travel_orders_official_station on travel_orders(official_station_id);
 
 -- ---------------------------------------------------------------------------
 -- 7. APPROVAL HISTORY (immutable trail; signature is snapshotted so past
@@ -198,14 +197,53 @@ create or replace function current_role_name() returns text as $$
   select role from employees where id = auth.uid();
 $$ language sql stable;
 
-create or replace function current_division_id() returns uuid as $$
-  select division_id from employees where id = auth.uid();
+create or replace function current_official_station_id() returns uuid as $$
+  select official_station_id from employees where id = auth.uid();
 $$ language sql stable;
+
+-- ---------------------------------------------------------------------------
+-- Auto-create the employees profile row when a new auth user signs up.
+-- Runs as SECURITY DEFINER (bypasses RLS), so this works correctly even when
+-- "Confirm email" is enabled and no client session exists yet at signup time.
+-- Reads full_name / employee_no from the signUp() call's `options.data`.
+-- ---------------------------------------------------------------------------
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  insert into public.employees (id, employee_no, full_name, email, role, status)
+  values (
+    new.id,
+    nullif(new.raw_user_meta_data->>'employee_no', ''),
+    coalesce(new.raw_user_meta_data->>'full_name', new.email),
+    new.email,
+    'employee',
+    'active'
+  )
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
+
+-- One-time backfill: creates a profile for any existing auth user that
+-- doesn't have one yet (e.g. accounts created before this trigger existed).
+insert into public.employees (id, full_name, email, role, status)
+select u.id, coalesce(u.raw_user_meta_data->>'full_name', u.email), u.email, 'employee', 'active'
+from auth.users u
+left join public.employees e on e.id = u.id
+where e.id is null;
 
 -- ---------------------------------------------------------------------------
 -- ROW LEVEL SECURITY
 -- ---------------------------------------------------------------------------
-alter table divisions enable row level security;
+alter table official_stations enable row level security;
 alter table employees enable row level security;
 alter table request_types enable row level security;
 alter table approval_levels enable row level security;
@@ -214,8 +252,8 @@ alter table travel_orders enable row level security;
 alter table approval_history enable row level security;
 
 -- Reference data: any authenticated user can read; only admins write.
-create policy "read divisions" on divisions for select using (auth.uid() is not null);
-create policy "admin write divisions" on divisions for all using (current_role_name() = 'admin') with check (current_role_name() = 'admin');
+create policy "read official_stations" on official_stations for select using (auth.uid() is not null);
+create policy "admin write official_stations" on official_stations for all using (current_role_name() = 'admin') with check (current_role_name() = 'admin');
 
 create policy "read request_types" on request_types for select using (auth.uid() is not null);
 create policy "admin write request_types" on request_types for all using (current_role_name() = 'admin') with check (current_role_name() = 'admin');
@@ -233,7 +271,7 @@ create policy "admin manage employees" on employees for all using (current_role_
 create policy "self insert employees" on employees for insert with check (id = auth.uid());
 
 -- Travel orders: owner can CRUD their own drafts; owner can read all their own requests;
--- approvers can read/update requests currently awaiting their level in their division;
+-- approvers can read/update requests currently awaiting their level at their official station;
 -- admins can read/manage everything.
 create policy "employee read own orders" on travel_orders for select
   using (employee_id = auth.uid());
@@ -252,7 +290,7 @@ create policy "approver read assigned orders" on travel_orders for select
       select 1 from approvers a
       where a.employee_id = auth.uid()
         and a.status = 'active'
-        and a.division_id = travel_orders.division_id
+        and a.official_station_id = travel_orders.official_station_id
         and a.level_no = travel_orders.current_level
         and (a.request_type_id is null or a.request_type_id = travel_orders.request_type_id)
     )
@@ -265,7 +303,7 @@ create policy "approver update assigned orders" on travel_orders for update
       select 1 from approvers a
       where a.employee_id = auth.uid()
         and a.status = 'active'
-        and a.division_id = travel_orders.division_id
+        and a.official_station_id = travel_orders.official_station_id
         and a.level_no = travel_orders.current_level
         and (a.request_type_id is null or a.request_type_id = travel_orders.request_type_id)
     )

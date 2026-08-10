@@ -11,7 +11,8 @@ att-system/
 ├── index.html          Login / sign-up
 ├── employee.html        Employee: create/save/submit/track requests
 ├── approver.html         Approver: review, approve/reject/return, e-sign
-├── admin.html            Admin: divisions, employees, approvers, approval
+├── admin.html            Admin: official stations, employees, approvers,
+│                         approval
 │                         levels, e-signatures, dashboard, monitoring
 ├── report.html            FIXED official print/PDF template
 ├── css/
@@ -23,7 +24,10 @@ att-system/
 │   ├── utils.js           Shared helpers (auth guard, shell, toasts, modals)
 │   ├── auth.js, employee.js, approver.js, admin.js, report.js
 └── sql/
-    └── schema.sql          Full Postgres schema, RLS policies, storage bucket
+    ├── schema.sql          Full Postgres schema, RLS policies, storage bucket
+    └── migration_division_to_official_station.sql
+                            Run ONCE if you already deployed the earlier
+                            "Division"-based schema — see Section 2.
 ```
 
 Everything is modular vanilla JS (ES modules) so the same data model, workflow,
@@ -32,6 +36,17 @@ and business logic documented here can be ported to a production framework
 Supabase schema.
 
 ## 2. Set up Supabase
+
+> **Already have this project deployed with a `divisions` table?** Approval
+> routing was renamed from "Division" to **"Official Station"** (a specific
+> school/office, since that's what your approvers are actually assigned by).
+> Run `sql/migration_division_to_official_station.sql` once in the SQL
+> Editor instead of `schema.sql` — it renames your existing table/columns in
+> place without losing data. Afterward, rename your existing station records
+> in **Admin → Official Stations** to real school names, and double-check
+> **Admin → Approval Levels** and **Admin → Approvers**, since both now key
+> off Official Station instead of Division.
+
 
 1. Create a project at https://supabase.com.
 2. Open **SQL Editor** and run the entire contents of `sql/schema.sql` once.
@@ -58,29 +73,33 @@ Supabase schema.
 
 Do this once, in order:
 
-1. **Divisions** — add your organizational divisions.
+1. **Official Stations** — add every school/office requests will be filed
+   from (e.g. "Banila Elementary School"). This is what approval routing is
+   keyed on.
 2. **Request Types** — Local Travel, Foreign Travel, Seminar/Training, etc.
    (a few are seeded already).
-3. **Approval Levels** — for each division (and optionally per request type),
-   define how many sequential approvals are required and what each level is
-   called (e.g. Level 1 = "Division Chief", Level 2 = "Regional Director").
-   If a division has no levels configured, requests route through a single
-   Level 1 approval.
-4. **Employees** — after each person signs up, assign their Division,
-   Position, Official Station, and Role (Employee / Approver / Admin).
-5. **Approvers** — assign a specific employee to a Division + (optional)
-   Request Type + Level number, set the position title as it should appear on
-   the printed report, and upload their e-signature image (PNG recommended).
-   This is the single source of truth for routing — nothing is hard-coded.
+3. **Approval Levels** — for each Official Station (and optionally per
+   request type), define how many sequential approvals are required and what
+   each level is called (e.g. Level 1 = "School Head", Level 2 = "District
+   Supervisor"). If a station has no levels configured, requests route
+   through a single Level 1 approval.
+4. **Employees** — after each person signs up, assign their Official
+   Station, Position, and Role (Employee / Approver / Admin). Their Official
+   Station is what routes their own requests to the right approver.
+5. **Approvers** — assign a specific employee to an Official Station +
+   (optional) Request Type + Level number, set the position title as it
+   should appear on the printed report, and upload their e-signature image
+   (PNG recommended). This is the single source of truth for routing —
+   nothing is hard-coded.
 
 ## 5. Workflow logic (implemented)
 
 ```
 Employee fills form → Save Draft (editable) or Submit
-  → System reads the employee's Division
-  → System resolves active Approval Levels for that Division/Request Type
+  → System reads the employee's Official Station
+  → System resolves active Approval Levels for that Official Station/Request Type
   → Request enters status "pending" at current_level = 1
-  → The matching active Approver(s) for (division, level, type) see it in
+  → The matching active Approver(s) for (official station, level, type) see it in
     their Approvals queue
   → Approver: Approve → if current_level < max_level, advance to next level
                         (status stays "pending")
@@ -96,7 +115,7 @@ Employee fills form → Save Draft (editable) or Submit
 
 Row Level Security enforces all of this server-side (see `sql/schema.sql`):
 employees can only touch their own draft/returned requests; approvers can
-only see/act on requests currently sitting at their assigned level/division;
+only see/act on requests currently sitting at their assigned level/official station;
 admins have full access.
 
 ## 6. The official report (`report.html`)
@@ -134,8 +153,8 @@ others+text), `fund_source` (local_funds / sub_aro+no / hrtd / others+text),
 **Two official signature slots, any number of approval levels.** The paper
 form only has two signature boxes ("Recommending Approval" and "Approved"),
 so that's exactly what prints: Level 1's approval fills the left box, and
-whichever level is configured as the division's final level fills the right
-box. If a division is configured with 3+ approval levels, every level's
+whichever level is configured as the station's final level fills the right
+box. If an official station is configured with 3+ approval levels, every level's
 action is still fully recorded (with its own signature snapshot) in the
 "Approval History (system record)" table appended below the official face —
 nothing is lost, but the two-box layout itself is never altered.
@@ -144,7 +163,10 @@ The template is fixed at **Letter size (8.5in × 11in)**, matching the
 official form, and print CSS hides the on-screen toolbar automatically.
 
 **Letterhead & branding — one-time edits, not per-request variables:**
-- Agency name, Region, Division, District, and address/telephone/email are
+- Agency name, Region, Division (as in the DepEd org name, e.g. "Schools
+  Division of Nueva Vizcaya" — this is letterhead text, unrelated to the
+  app's Official Station routing concept), District, and address/telephone/
+  email are
   written directly in `report.html` / near the bottom of the same file.
   Edit them once for your office.
 - `assets/agency-seal.svg` (top, 64×64 rendered) and `assets/office-logo.svg`
@@ -186,11 +208,11 @@ rows on the report.
 - No pagination on list views (fine for MVP volumes; add server-side paging
   for production).
 - The control-number sequence (`next_control_no()`) is global; if your agency
-  numbers per-division or per-year-and-division, adjust the SQL function.
+  numbers per-station or per-year-and-station, adjust the SQL function.
 - The report's agency seal (`assets/agency-seal.svg`) and office logo
   (`assets/office-logo.svg`) are still placeholder graphics — drop in your
   real image files (see Section 6) before printing for real use.
-- The official form only shows 2 signature boxes; divisions with 3+ approval
+- The official form only shows 2 signature boxes; official stations with 3+ approval
   levels still get every action logged in the system-record table below the
   form, but only Level 1 and the final level get a dedicated printed
   signature box (see Section 6).

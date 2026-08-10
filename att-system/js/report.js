@@ -18,7 +18,7 @@ async function init() {
 
   const { data: order, error } = await sb
     .from("travel_orders")
-    .select("*, employees(full_name, position, official_station), divisions(name)")
+    .select("*, employees(full_name, position), official_stations(name)")
     .eq("id", id)
     .maybeSingle();
 
@@ -68,7 +68,7 @@ function populate(o, history) {
   set("v-comp2-name", companions[1]?.name ? companions[1].name.toUpperCase() : "");
   set("v-comp2-position", companions[1]?.position || "");
 
-  set("v-official-station", (o.official_station || o.employees?.official_station || "").toUpperCase());
+  set("v-official-station", (o.official_station || o.official_stations?.name || "").toUpperCase());
   set("v-destination", (o.destination || "").toUpperCase());
   set("v-travel-date", fmtTravelDate(o.travel_date_from, o.travel_date_to).toUpperCase());
   set("v-purpose", o.purpose || "");
