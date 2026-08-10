@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>My Requests · Authority to Travel</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="shell-topbar"></div>
+<div class="app-shell">
+  <div id="shell-sidebar"></div>
+
+  <main class="main">
+    <div class="main-scroll">
+      <div class="page-head">
+        <div>
+          <h1>My Authority to Travel Requests</h1>
+          <p class="sub">Create, save as draft, submit, and track your travel requests.</p>
+        </div>
+        <div class="head-actions">
+          <button class="btn btn-gold" id="btn-new">+ New Request</button>
+        </div>
+      </div>
+
+      <div class="stat-grid" id="stat-grid">
+        <div class="stat-card"><div class="label">Drafts</div><div class="value" id="st-draft">—</div></div>
+        <div class="stat-card"><div class="label">Pending</div><div class="value" id="st-pending">—</div></div>
+        <div class="stat-card ok"><div class="label">Approved</div><div class="value" id="st-approved">—</div></div>
+        <div class="stat-card bad"><div class="label">Rejected / Returned</div><div class="value" id="st-rejected">—</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h3>Request History</h3>
+          <select id="filter-status" class="btn-ghost btn btn-sm" style="min-height:36px">
+            <option value="">All statuses</option>
+            <option value="draft">Draft</option>
+            <option value="submitted">Submitted</option>
+            <option value="pending">Pending</option>
+            <option value="returned">Returned</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table class="data cards" id="tbl-requests">
+            <thead>
+              <tr>
+                <th>Control No.</th><th>Filed</th><th>Destination</th><th>Travel Dates</th>
+                <th>Status</th><th>Level</th><th>Actions</th>
+              </tr>
+            </thead>
+            <tbody><tr class="empty-row"><td colspan="7">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- =========================== Request Form Modal =========================== -->
+<div class="overlay" id="overlay-form">
+  <div class="modal wide">
+    <div class="modal-head">
+      <h3 id="form-title">New Authority to Travel Request</h3>
+      <button class="modal-close" id="form-close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <form id="att-form">
+        <input type="hidden" id="f-id">
+
+        <fieldset>
+          <legend>Filing &amp; Employee Details</legend>
+          <div class="form-grid">
+            <div class="field">
+              <label>Date of Filing <span class="req">*</span></label>
+              <input type="date" id="f-filing-date" required>
+            </div>
+            <div class="field">
+              <label>Employee</label>
+              <input type="text" id="f-employee-name" readonly>
+            </div>
+            <div class="field">
+              <label>Position <span class="req">*</span></label>
+              <input type="text" id="f-position" required placeholder="e.g. Administrative Officer IV">
+            </div>
+            <div class="field">
+              <label>Official Station <span class="req">*</span></label>
+              <input type="text" id="f-station" required placeholder="e.g. Central Office, Manila">
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Travel Details</legend>
+          <div class="form-grid">
+            <div class="field full">
+              <label>Destination <span class="req">*</span></label>
+              <input type="text" id="f-destination" required placeholder="e.g. NVSU Bayombong">
+            </div>
+            <div class="field">
+              <label>Travel Date — From <span class="req">*</span></label>
+              <input type="date" id="f-date-from" required>
+            </div>
+            <div class="field">
+              <label>Travel Date — To <span class="req">*</span></label>
+              <input type="date" id="f-date-to" required>
+            </div>
+            <div class="field full">
+              <label>Purpose of Travel <span class="req">*</span></label>
+              <textarea id="f-purpose" required placeholder="e.g. Orientation / SBFP Guidelines"></textarea>
+            </div>
+            <div class="field full">
+              <label>Activity Organized / Sponsored By</label>
+              <input type="text" id="f-activity" placeholder="e.g. Schools Division Office">
+            </div>
+            <div class="field">
+              <label>Request Type</label>
+              <select id="f-request-type"></select>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Companions <span class="hint">(optional — travelling on the same authority)</span></legend>
+          <div id="f-companions"></div>
+          <button type="button" class="btn btn-ghost btn-sm" id="btn-add-companion">+ Add companion</button>
+        </fieldset>
+
+        <fieldset>
+          <legend>Travel Is On</legend>
+          <div class="checkbox-row">
+            <label><input type="radio" name="f-travel-on" value="official_business" checked> Official Business</label>
+            <label><input type="radio" name="f-travel-on" value="official_time"> Official Time</label>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Legal Basis</legend>
+          <div class="checkbox-row">
+            <label><input type="checkbox" id="f-lb-memo"> DepEd Memo</label>
+            <label><input type="checkbox" id="f-lb-advisory"> DepEd Advisory</label>
+            <label><input type="checkbox" id="f-lb-invitation"> Invitation Letter</label>
+            <label><input type="checkbox" id="f-lb-others"> Others</label>
+          </div>
+          <div class="field" style="margin-top:10px">
+            <input type="text" id="f-lb-others-text" placeholder="Specify if “Others” is checked">
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Expenses Covered</legend>
+          <div class="field">
+            <label class="hint">Subject to the usual accounting and auditing rules and regulations</label>
+            <textarea id="f-expenses-covered" placeholder="e.g. Transportation and meals"></textarea>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Fund Source</legend>
+          <div class="checkbox-row">
+            <label><input type="checkbox" id="f-fs-local"> Local Funds</label>
+            <label><input type="checkbox" id="f-fs-subaro"> Sub-ARO No.</label>
+            <label><input type="checkbox" id="f-fs-hrtd"> HRTD</label>
+            <label><input type="checkbox" id="f-fs-others"> Others</label>
+          </div>
+          <div class="form-grid" style="margin-top:10px">
+            <div class="field"><input type="text" id="f-fs-subaro-text" placeholder="Sub-ARO No. (if checked)"></div>
+            <div class="field"><input type="text" id="f-fs-others-text" placeholder="Specify if “Others” is checked"></div>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Check / Tick if Applicable</legend>
+          <div class="checkbox-row">
+            <label><input type="checkbox" id="f-gov-vehicle"> With Government Vehicle</label>
+            <label><input type="checkbox" id="f-reg-fee"> With Registration Fee</label>
+          </div>
+        </fieldset>
+      </form>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" id="btn-cancel">Cancel</button>
+      <button class="btn btn-ghost" id="btn-save-draft">Save Draft</button>
+      <button class="btn btn-primary" id="btn-submit-req">Submit for Approval</button>
+    </div>
+  </div>
+</div>
+
+<!-- =========================== Detail / Track Modal =========================== -->
+<div class="overlay" id="overlay-detail">
+  <div class="modal wide">
+    <div class="modal-head">
+      <h3 id="detail-title">Request Details</h3>
+      <button class="modal-close" id="detail-close">&times;</button>
+    </div>
+    <div class="modal-body" id="detail-body">Loading…</div>
+    <div class="modal-foot" id="detail-foot"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script type="module" src="js/employee.js"></script>
+</body>
+</html>

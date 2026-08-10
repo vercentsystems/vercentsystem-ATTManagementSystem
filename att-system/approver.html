@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Approvals · Authority to Travel</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="shell-topbar"></div>
+<div class="app-shell">
+  <div id="shell-sidebar"></div>
+
+  <main class="main">
+    <div class="main-scroll">
+      <div class="page-head">
+        <div>
+          <h1>Approvals</h1>
+          <p class="sub">Requests currently awaiting your action.</p>
+        </div>
+      </div>
+
+      <div class="stat-grid">
+        <div class="stat-card"><div class="label">Pending My Action</div><div class="value" id="st-pending">—</div></div>
+        <div class="stat-card ok"><div class="label">Approved by Me</div><div class="value" id="st-approved">—</div></div>
+        <div class="stat-card bad"><div class="label">Rejected by Me</div><div class="value" id="st-rejected">—</div></div>
+        <div class="stat-card gold"><div class="label">Returned by Me</div><div class="value" id="st-returned">—</div></div>
+      </div>
+
+      <div class="tabs">
+        <button class="active" data-tab="pending">Pending Approvals</button>
+        <button data-tab="history">My Approval Activity</button>
+      </div>
+
+      <div class="card" id="panel-pending">
+        <div class="table-wrap">
+          <table class="data cards" id="tbl-pending">
+            <thead>
+              <tr><th>Control No.</th><th>Employee</th><th>Division</th><th>Destination</th><th>Travel Dates</th><th>Level</th><th>Actions</th></tr>
+            </thead>
+            <tbody><tr class="empty-row"><td colspan="7">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" id="panel-history" style="display:none">
+        <div class="table-wrap">
+          <table class="data cards" id="tbl-history">
+            <thead><tr><th>Control No.</th><th>Employee</th><th>Action</th><th>Level</th><th>Date</th><th>Remarks</th></tr></thead>
+            <tbody><tr class="empty-row"><td colspan="6">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ============================ Review Modal ============================ -->
+<div class="overlay" id="overlay-review">
+  <div class="modal wide">
+    <div class="modal-head">
+      <h3 id="review-title">Review Request</h3>
+      <button class="modal-close" id="review-close">&times;</button>
+    </div>
+    <div class="modal-body" id="review-body">Loading…</div>
+    <div class="modal-foot">
+      <button class="btn btn-warn" id="btn-return">Return for Correction</button>
+      <button class="btn btn-bad" id="btn-reject">Reject</button>
+      <button class="btn btn-ok" id="btn-approve">Approve &amp; Sign</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================ Remarks Modal ============================ -->
+<div class="overlay" id="overlay-remarks">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="remarks-title">Add Remarks</h3>
+      <button class="modal-close" id="remarks-close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label id="remarks-label">Remarks</label>
+        <textarea id="remarks-text" placeholder="Explain your decision…"></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" id="remarks-cancel">Cancel</button>
+      <button class="btn btn-primary" id="remarks-confirm">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script type="module" src="js/approver.js"></script>
+</body>
+</html>
