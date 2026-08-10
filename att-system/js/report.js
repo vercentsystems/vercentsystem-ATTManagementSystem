@@ -188,43 +188,23 @@ function buildApprovalCells(o, history) {
   const approvals = history.filter(h => h.action === "approved");
   const latestOfType = (type) => [...approvals].reverse().find(h => h.approval_type === type);
 
-  // Neither box is "required" — a station may only have one role maintained
-  // (e.g. just Recommending Approval, no separate Approving Authority yet).
-  // Once the request is fully decided, a box with no matching record was
-  // never part of this station's configured workflow, so it should read as
-  // simply blank rather than implying something is still awaiting action.
-  const decided = ["approved", "rejected"].includes(o.status);
-
-  document.getElementById("v-recommend-cell").innerHTML = signatureCellHtml(latestOfType("recommending"), decided);
-  document.getElementById("v-approved-cell").innerHTML = signatureCellHtml(latestOfType("approving"), decided);
+  document.getElementById("v-recommend-cell").innerHTML = signatureCellHtml(latestOfType("recommending"));
+  document.getElementById("v-approved-cell").innerHTML = signatureCellHtml(latestOfType("approving"));
 }
 
-function signatureCellHtml(rec, decided) {
-  if (rec) {
-    return `
-      <div class="sig-img-wrap">${rec.signature_snapshot_url ? `<img src="${rec.signature_snapshot_url}" alt="signature">` : ""}</div>
-      <div class="sig-line">
-        <div class="sig-name">${escapeHtml(rec.approver_name_snapshot)}, ${escapeHtml(rec.approver_position_snapshot)}</div>
-        <div class="sig-hint">(name, position, and signature)</div>
-      </div>
-      <div class="sig-date">Date: <span class="fill-blank">${fmtDate(rec.action_date)}</span></div>
-    `;
-  }
-  if (decided) {
-    // Not maintained for this station and nothing more is coming — leave
-    // the box genuinely blank instead of implying it's still pending.
-    return `
-      <div class="sig-img-wrap"></div>
-      <div class="sig-line">&nbsp;</div>
-      <div class="sig-date">&nbsp;</div>
-    `;
-  }
+// The caption labels — "(name, position, and signature)" and "Date:" — are
+// fixed parts of the official form and always print, exactly as they do on
+// the blank paper form. Only the actual value (name, signature image, date)
+// is optional: it's filled in when that role has been maintained and acted
+// on, and left blank otherwise. No value is ever "required" to print the box.
+function signatureCellHtml(rec) {
   return `
-    <div class="sig-img-wrap"></div>
+    <div class="sig-img-wrap">${rec?.signature_snapshot_url ? `<img src="${rec.signature_snapshot_url}" alt="signature">` : ""}</div>
     <div class="sig-line">
+      ${rec ? `<div class="sig-name">${escapeHtml(rec.approver_name_snapshot)}, ${escapeHtml(rec.approver_position_snapshot)}</div>` : ""}
       <div class="sig-hint">(name, position, and signature)</div>
     </div>
-    <div class="sig-date">Date: <span class="fill-blank">&nbsp;</span></div>
+    <div class="sig-date">Date: <span class="fill-blank">${rec ? fmtDate(rec.action_date) : "&nbsp;"}</span></div>
   `;
 }
 
