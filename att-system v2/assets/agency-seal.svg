@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
-  <circle cx="100" cy="100" r="94" fill="#f7f8fa" stroke="#16263f" stroke-width="3"/>
-  <circle cx="100" cy="100" r="80" fill="none" stroke="#16263f" stroke-width="1.5" stroke-dasharray="2 3"/>
-  <text x="100" y="72" text-anchor="middle" font-family="Georgia, serif" font-size="11" fill="#16263f" font-weight="700">REPLACE WITH</text>
-  <text x="100" y="88" text-anchor="middle" font-family="Georgia, serif" font-size="11" fill="#16263f" font-weight="700">AGENCY SEAL</text>
-  <path d="M70 105 L100 130 L130 100 L118 100 L118 150 L82 150 L82 100 Z" fill="#3a628f" opacity="0.55"/>
-  <text x="100" y="168" text-anchor="middle" font-family="Georgia, serif" font-size="9" fill="#3a628f">200 x 200 px PNG</text>
-</svg>
