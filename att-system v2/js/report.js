@@ -4,8 +4,6 @@ import { requireRole, fmtDate, fmtDateTime, escapeHtml } from "./utils.js";
 const CHECKED = "&#9746;"; // ☒
 const UNCHECKED = "&#9744;"; // ☐
 
-let CURRENT_ORDER = null;
-
 init();
 
 async function init() {
@@ -28,7 +26,6 @@ async function init() {
     statusLine.textContent = "This request could not be found or you do not have access to it.";
     return;
   }
-  CURRENT_ORDER = order;
 
   const { data: history } = await sb
     .from("approval_history")
@@ -43,77 +40,6 @@ async function init() {
     : `${order.control_no || "Draft"} — Status: ${order.status.toUpperCase()} (signatures finalize once approved)`;
 
   document.getElementById("btn-print").addEventListener("click", () => window.print());
-  wireDownloadModal();
-}
-
-/* ------------------------- Password-protected download ------------------ */
-function wireDownloadModal() {
-  const overlay = document.getElementById("dl-overlay");
-  const passwordInput = document.getElementById("dl-password");
-  const confirmInput = document.getElementById("dl-password-confirm");
-  const errorEl = document.getElementById("dl-error");
-
-  document.getElementById("btn-download").addEventListener("click", () => {
-    passwordInput.value = "";
-    confirmInput.value = "";
-    errorEl.textContent = "";
-    overlay.classList.add("show");
-    passwordInput.focus();
-  });
-  document.getElementById("dl-cancel").addEventListener("click", () => overlay.classList.remove("show"));
-  overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.classList.remove("show"); });
-
-  document.getElementById("dl-confirm").addEventListener("click", async () => {
-    const pw = passwordInput.value;
-    const pw2 = confirmInput.value;
-    if (pw.length < 6) { errorEl.textContent = "Password must be at least 6 characters."; return; }
-    if (pw !== pw2) { errorEl.textContent = "Passwords do not match."; return; }
-    errorEl.textContent = "";
-
-    const btn = document.getElementById("dl-confirm");
-    btn.disabled = true; btn.textContent = "Generating…";
-    try {
-      await generateEncryptedPdf(CURRENT_ORDER, pw);
-      overlay.classList.remove("show");
-    } catch (err) {
-      errorEl.textContent = "Could not generate PDF: " + err.message;
-    } finally {
-      btn.disabled = false; btn.textContent = "Download";
-    }
-  });
-}
-
-// Renders the fixed report layout to an image (html2canvas), then embeds it
-// into a Letter-size PDF using jsPDF's built-in encryption — the resulting
-// file requires the given password to open. This is a client-side, best-
-// effort protection (no backend in this app to do it server-side); the
-// underlying PDF encryption strength depends on the loaded jsPDF version,
-// so test opening the downloaded file in your target PDF reader.
-async function generateEncryptedPdf(order, password) {
-  if (!window.html2canvas || !window.jspdf) {
-    throw new Error("PDF library failed to load — check your internet connection and try again.");
-  }
-
-  const paper = document.getElementById("paper");
-  const canvas = await window.html2canvas(paper, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
-  const imgData = canvas.toDataURL("image/png");
-
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({
-    orientation: "portrait",
-    unit: "pt",
-    format: "letter",
-    encryption: {
-      userPassword: password,
-      ownerPassword: password,
-      userPermissions: ["print"],
-    },
-  });
-
-  // Letter page = 612 x 792 pt; canvas already matches the page's aspect
-  // ratio since it's a snapshot of the fixed 8.5in x 11in .paper element.
-  doc.addImage(imgData, "PNG", 0, 0, 612, 792);
-  doc.save(`${order.control_no || "ATT-draft"}.pdf`);
 }
 
 function set(id, value) {
@@ -179,27 +105,19 @@ function populate(o, history) {
 }
 
 // Official form has exactly two signature slots: "Recommending Approval"
-// (Immediate Supervisor / Department Head) and "Approved" (Approving
-// Authority — Division Head / Director / Executive / Authorized Official).
-// Each approval_history row carries its own approval_type snapshot, taken
-// at the moment it was recorded, so this never depends on level numbering
-// or on the current approval_levels configuration.
+// (Level 1) and "Approved" (the final configured level). Any intermediate
+// levels are still recorded in full in the Approval History table below.
 function buildApprovalCells(o, history) {
-  const approvals = history.filter(h => h.action === "approved");
-  const latestOfType = (type) => [...approvals].reverse().find(h => h.approval_type === type);
+  const approvals = history.filter(h => h.action === "approved").sort((a, b) => a.level_no - b.level_no);
+  const level1 = approvals.find(h => h.level_no === 1);
+  const finalLevel = o.max_level || (approvals.length ? Math.max(...approvals.map(a => a.level_no)) : 1);
+  const finalRec = approvals.find(h => h.level_no === finalLevel);
 
-  // Neither box is "required" — a station may only have one role maintained
-  // (e.g. just Recommending Approval, no separate Approving Authority yet).
-  // Once the request is fully decided, a box with no matching record was
-  // never part of this station's configured workflow, so it should read as
-  // simply blank rather than implying something is still awaiting action.
-  const decided = ["approved", "rejected"].includes(o.status);
-
-  document.getElementById("v-recommend-cell").innerHTML = signatureCellHtml(latestOfType("recommending"), decided);
-  document.getElementById("v-approved-cell").innerHTML = signatureCellHtml(latestOfType("approving"), decided);
+  document.getElementById("v-recommend-cell").innerHTML = signatureCellHtml(level1);
+  document.getElementById("v-approved-cell").innerHTML = signatureCellHtml(finalRec);
 }
 
-function signatureCellHtml(rec, decided) {
+function signatureCellHtml(rec) {
   if (rec) {
     return `
       <div class="sig-img-wrap">${rec.signature_snapshot_url ? `<img src="${rec.signature_snapshot_url}" alt="signature">` : ""}</div>
@@ -208,15 +126,6 @@ function signatureCellHtml(rec, decided) {
         <div class="sig-hint">(name, position, and signature)</div>
       </div>
       <div class="sig-date">Date: <span class="fill-blank">${fmtDate(rec.action_date)}</span></div>
-    `;
-  }
-  if (decided) {
-    // Not maintained for this station and nothing more is coming — leave
-    // the box genuinely blank instead of implying it's still pending.
-    return `
-      <div class="sig-img-wrap"></div>
-      <div class="sig-line">&nbsp;</div>
-      <div class="sig-date">&nbsp;</div>
     `;
   }
   return `

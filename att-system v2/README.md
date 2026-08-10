@@ -17,7 +17,7 @@ att-system/
 ├── report.html            FIXED official print/PDF template
 ├── css/
 │   ├── style.css         Responsive app UI (sidebar/tablet/mobile)
-│   └── report.css        Fixed official document layout (Letter paper size)
+│   └── report.css        Fixed official document layout (Legal paper size)
 ├── js/
 │   ├── config.js         Supabase URL/anon key (edit this)
 │   ├── supabaseClient.js Shared Supabase client
@@ -25,13 +25,9 @@ att-system/
 │   ├── auth.js, employee.js, approver.js, admin.js, report.js
 └── sql/
     ├── schema.sql          Full Postgres schema, RLS policies, storage bucket
-    ├── migration_division_to_official_station.sql
-    │                       Run ONCE if you already deployed the earlier
-    │                       "Division"-based schema — see Section 2.
-    └── migration_add_approval_type.sql
-                            Run ONCE if you deployed before Approval Type
-                            (Recommending Approval / Approving Authority)
-                            existed — see Section 2.
+    └── migration_division_to_official_station.sql
+                            Run ONCE if you already deployed the earlier
+                            "Division"-based schema — see Section 2.
 ```
 
 Everything is modular vanilla JS (ES modules) so the same data model, workflow,
@@ -50,17 +46,6 @@ Supabase schema.
 > in **Admin → Official Stations** to real school names, and double-check
 > **Admin → Approval Levels** and **Admin → Approvers**, since both now key
 > off Official Station instead of Division.
-
-> **Already deployed and just need the Approval Type update?** Run
-> `sql/migration_add_approval_type.sql` once in the SQL Editor. It adds an
-> explicit **Approval Type** field to each Approval Level — **Recommending
-> Approval** (Immediate Supervisor / Department Head) vs **Approving
-> Authority** (Division Head / Director / Executive / Authorized Official) —
-> which decides which signature box the report prints an approval into. It
-> auto-backfills a best-effort guess for existing levels/history (highest
-> level number per station → Approving Authority, everything else →
-> Recommending Approval); review and correct those in **Admin → Approval
-> Levels** afterward.
 
 
 1. Create a project at https://supabase.com.
@@ -94,16 +79,10 @@ Do this once, in order:
 2. **Request Types** — Local Travel, Foreign Travel, Seminar/Training, etc.
    (a few are seeded already).
 3. **Approval Levels** — for each Official Station (and optionally per
-   request type), define how many sequential approvals are required, what
+   request type), define how many sequential approvals are required and what
    each level is called (e.g. Level 1 = "School Head", Level 2 = "District
-   Supervisor"), and its **Approval Type**:
-   - **Recommending Approval** — typically the Immediate Supervisor /
-     Department Head. Prints in the report's "Recommending Approval" box.
-   - **Approving Authority** — typically the Division Head / Director /
-     Executive / other Authorized Official. Prints in the report's
-     "Approved" box. This should be the *final* level for that station.
-   If a station has no levels configured, requests route through a single
-   Level 1 approval (defaults to Recommending Approval type).
+   Supervisor"). If a station has no levels configured, requests route
+   through a single Level 1 approval.
 4. **Employees** — after each person signs up, assign their Official
    Station, Position, and Role (Employee / Approver / Admin). Their Official
    Station is what routes their own requests to the right approver.
@@ -164,24 +143,21 @@ restructures the markup. Mapping to the brief's variables:
 | `{{travel_date}}` | `v-travel-date` |
 | `{{purpose}}` | `v-purpose` |
 | `{{activity_sponsor}}` | `v-activity` |
-| `{{approver_name}}` / `{{approver_position}}` / `{{approver_signature}}` / `{{approval_date}}` | built into `v-recommend-cell` (Recommending Approval) and `v-approved-cell` (Approving Authority) |
+| `{{approver_name}}` / `{{approver_position}}` / `{{approver_signature}}` / `{{approval_date}}` | built into `v-recommend-cell` (Level 1) and `v-approved-cell` (final level) |
 
 **Checkboxes** (`☐` → `☒`) are driven by real data instead of free text:
 `travel_on`, `legal_basis` (deped_memo / deped_advisory / invitation_letter /
 others+text), `fund_source` (local_funds / sub_aro+no / hrtd / others+text),
 `with_government_vehicle`, `with_registration_fee`.
 
-**Two official signature slots, by explicit role — not level position.** The
-paper form only has two signature boxes ("Recommending Approval" and
-"Approved"). Which approver's signature lands in which box is decided by the
-**Approval Type** you set on each Approval Level in Admin (Section 4) —
-`recommending` → left box, `approving` → right box — not by whether it's
-Level 1 or Level 2. This is snapshotted onto `approval_history` at the
-moment of the decision (same as the signature image), so it stays fixed even
-if you later reconfigure a station's levels. If a station has 3+ levels,
-every level's action is still fully recorded in the "Approval History
-(system record)" table appended below the official face — nothing is lost,
-but the two-box layout itself is never altered.
+**Two official signature slots, any number of approval levels.** The paper
+form only has two signature boxes ("Recommending Approval" and "Approved"),
+so that's exactly what prints: Level 1's approval fills the left box, and
+whichever level is configured as the station's final level fills the right
+box. If an official station is configured with 3+ approval levels, every level's
+action is still fully recorded (with its own signature snapshot) in the
+"Approval History (system record)" table appended below the official face —
+nothing is lost, but the two-box layout itself is never altered.
 
 The template is fixed at **Letter size (8.5in × 11in)**, matching the
 official form, and print CSS hides the on-screen toolbar automatically.
@@ -203,30 +179,6 @@ official form, and print CSS hides the on-screen toolbar automatically.
   Philippines". Requires internet access when printing; swap the `<link>` in
   `report.html`'s `<head>` for a self-hosted font if offline printing is
   required.
-
-**Password-protected PDF download.** Next to "Print / Save as PDF" is a
-**"Download PDF (password-protected)"** button. Clicking it asks you to set
-a password (min. 6 characters) required to open the resulting file, then
-generates it entirely in the browser — a snapshot of the report is rendered
-via `html2canvas`, embedded into a Letter-size PDF via `jsPDF`, and encrypted
-using jsPDF's built-in password support (both the "open" and "owner"
-passwords are set to what you enter; print permission is allowed, editing is
-not). There's no backend involved, so:
-- The password is never sent anywhere or stored — share it with the
-  recipient through a separate channel (e.g. verbally, SMS), not in the same
-  email as the PDF.
-- This depends on `jsPDF`'s encryption feature (loaded via CDN,
-  `jspdf@2.5.1`), which is a comparatively newer part of that library. Test
-  opening a downloaded file with your actual PDF reader (Adobe Reader,
-  Preview, browser PDF viewer, etc.) before relying on it for sensitive
-  documents in production — if your reader doesn't prompt for a password,
-  pin a different `jspdf` version or swap in a server-side PDF encryption
-  step (e.g. `qpdf --encrypt` in a small backend function) for guaranteed
-  compatibility.
-- If a request has a lot of content and the rendered image doesn't fit
-  cleanly on one Letter page, the current implementation stretches it to
-  fill exactly one page — extend `generateEncryptedPdf()` in `js/report.js`
-  with multi-page slicing if you expect longer documents.
 
 ## 7. Companions field
 

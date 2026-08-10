@@ -52,14 +52,6 @@ create table if not exists request_types (
 -- 4. APPROVAL LEVELS (defines how many sequential levels an official station /
 --    request type combination requires, e.g. Level 1 = School Head,
 --    Level 2 = Regional Director)
---
---    approval_type is the ROLE printed on the official report, independent
---    of level number:
---      'recommending' -> prints in the "Recommending Approval" box
---                         (typically Immediate Supervisor / Department Head)
---      'approving'    -> prints in the "Approved" box
---                         (typically Division Head / Director / Executive /
---                         Authorized Official — the final signoff)
 -- ---------------------------------------------------------------------------
 create table if not exists approval_levels (
   id                uuid primary key default gen_random_uuid(),
@@ -67,7 +59,6 @@ create table if not exists approval_levels (
   request_type_id   uuid references request_types(id), -- null = applies to all types
   level_no          int not null check (level_no > 0),
   label             text not null,                       -- e.g. "School Head"
-  approval_type     text not null default 'recommending' check (approval_type in ('recommending','approving')),
   status            text not null default 'active' check (status in ('active','inactive')),
   effective_date    date not null default current_date,
   created_at        timestamptz not null default now(),
@@ -154,16 +145,14 @@ create index if not exists idx_travel_orders_status on travel_orders(status);
 create index if not exists idx_travel_orders_official_station on travel_orders(official_station_id);
 
 -- ---------------------------------------------------------------------------
--- 7. APPROVAL HISTORY (immutable trail; signature AND approval_type are
---    snapshotted so past approvals never change even if the approver's
---    signature or the level's configured role changes later)
+-- 7. APPROVAL HISTORY (immutable trail; signature is snapshotted so past
+--    approvals never change even if the approver updates their signature)
 -- ---------------------------------------------------------------------------
 create table if not exists approval_history (
   id                    uuid primary key default gen_random_uuid(),
   travel_order_id       uuid not null references travel_orders(id) on delete cascade,
   approver_id           uuid not null references approvers(id),
   level_no              int not null,
-  approval_type         text not null default 'recommending' check (approval_type in ('recommending','approving')),
   action                text not null check (action in ('approved','rejected','returned','submitted')),
   remarks               text not null default '',
   approver_name_snapshot     text not null,

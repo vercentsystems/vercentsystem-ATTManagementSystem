@@ -97,16 +97,6 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .brand-text { line-height: 1.15; }
 .brand-text strong { display:block; font-family: var(--font-display); font-size: 15px; color: #fff; }
 .brand-text span { font-size: 11px; color: #9fb0c8; letter-spacing: .04em; text-transform: uppercase; }
-.role-switcher {
-  appearance: none; -webkit-appearance: none; background: transparent;
-  border: none; color: #f3d9a4; font-size: 11px; font-weight: 700;
-  letter-spacing: .04em; text-transform: uppercase; padding: 0 14px 0 0; margin-top: 1px;
-  cursor: pointer;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath fill='%23f3d9a4' d='M2.5 4.5l3.5 3 3.5-3z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat; background-position: right center; background-size: 10px;
-}
-.role-switcher:focus-visible { outline: 1px solid #f3d9a4; outline-offset: 2px; }
-.role-switcher option { background: #16263f; color: #eef2f8; }
 
 .nav-group-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; color: #7f93ae; margin: 16px 10px 6px; }
 .nav-link {

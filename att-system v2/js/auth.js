@@ -20,8 +20,6 @@ function switchTab(which) {
   tabSignup.classList.toggle("active", !signin);
   formSignin.style.display = signin ? "block" : "none";
   formSignup.style.display = signin ? "none" : "block";
-  formSignin.reset();
-  formSignup.reset();
 }
 tabSignin.addEventListener("click", () => switchTab("signin"));
 tabSignup.addEventListener("click", () => switchTab("signup"));
@@ -44,7 +42,6 @@ formSignin.addEventListener("submit", async (e) => {
   const password = document.getElementById("si-password").value;
 
   const { data, error } = await sb.auth.signInWithPassword({ email, password });
-  formSignin.reset(); // clear email + password immediately after this attempt, success or failure
   if (error) {
     showAlert(error.message);
     btn.disabled = false; btn.textContent = "Sign in";
@@ -73,7 +70,6 @@ formSignup.addEventListener("submit", async (e) => {
     email, password,
     options: { data: { full_name, employee_no } },
   });
-  formSignup.reset(); // clear all fields immediately after this attempt, success or failure
 
   if (error) {
     showAlert(error.message);

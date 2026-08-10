@@ -125,34 +125,10 @@ table.log-table th, table.log-table td { border: 1px solid #999; padding: 3px 7p
 table.log-table th { background: #f0f2f5; }
 .doc-meta { margin-top: 10px; font-size: 8pt; color: #444; font-family: Arial, sans-serif; display: flex; justify-content: space-between; }
 
-/* ---------- Password-protected download modal (screen only) ------------- */
-.dl-overlay {
-  position: fixed; inset: 0; background: rgba(15,20,30,.6); display: none;
-  align-items: center; justify-content: center; padding: 16px; z-index: 50;
-  font-family: "Segoe UI", Arial, sans-serif;
-}
-.dl-overlay.show { display: flex; }
-.dl-modal { background: #fff; border-radius: 12px; padding: 22px 24px; width: 100%; max-width: 380px; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
-.dl-modal h3 { margin: 0 0 8px; font-size: 17px; color: #16263f; }
-.dl-modal p { margin: 0 0 16px; font-size: 12.5px; color: #55627a; line-height: 1.5; }
-.dl-modal label { display: block; font-size: 12px; font-weight: 600; color: #3d4a5c; margin: 10px 0 4px; }
-.dl-modal input[type=password] {
-  width: 100%; padding: 9px 11px; border-radius: 7px; border: 1px solid #c4cddb; font-size: 13.5px; font-family: inherit;
-}
-.dl-error { color: #b3312c; font-size: 12px; min-height: 16px; margin-top: 8px; }
-.dl-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
-.dl-actions button {
-  border: 1px solid #c4cddb; background: #fff; color: #16263f; padding: 8px 15px; border-radius: 7px;
-  font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit;
-}
-.dl-actions button.primary { background: #16263f; border-color: #16263f; color: #fff; }
-.dl-actions button:disabled { opacity: .6; cursor: not-allowed; }
-
 /* ---------- Print rules ---------- */
 @media print {
   body.report-body { background: #fff; }
   .report-toolbar { display: none !important; }
-  .dl-overlay { display: none !important; }
   .paper { box-shadow: none; margin: 0; width: auto; min-height: auto; }
   a { color: inherit; text-decoration: none; }
 }

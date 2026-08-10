@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <circle cx="60" cy="60" r="55" fill="#eef2f8" stroke="#16263f" stroke-width="2"/>
+  <text x="60" y="55" text-anchor="middle" font-family="Georgia, serif" font-size="8" fill="#16263f" font-weight="700">DISTRICT</text>
+  <text x="60" y="67" text-anchor="middle" font-family="Georgia, serif" font-size="8" fill="#16263f" font-weight="700">LOGO</text>
+</svg>

@@ -1,6 +1,6 @@
 import { sb } from "./supabaseClient.js";
 import {
-  requireRole, renderShell, getAccessibleDestinations, toast, fmtDate, escapeHtml,
+  requireRole, renderShell, toast, fmtDate, escapeHtml,
   statusBadge, openModal, closeModal, wireModalDismiss, qs, qsa,
 } from "./utils.js";
 
@@ -37,14 +37,12 @@ async function init() {
   if (!auth) return;
   PROFILE = auth.profile;
 
-  const destinations = await getAccessibleDestinations(PROFILE);
   renderShell({
     profile: PROFILE,
     brandSub: "Approver",
-    destinations,
-    currentPage: "approver.html",
     links: [
       { href: "approver.html", icon: "✅", label: "Approvals", active: true },
+      ...(PROFILE.role === "admin" ? [{ href: "admin.html", icon: "🛠", label: "Admin Console", active: false }] : []),
     ],
   });
 
@@ -148,28 +146,6 @@ function myAssignmentFor(order) {
     a.level_no === order.current_level &&
     (a.request_type_id === null || a.request_type_id === order.request_type_id)
   );
-}
-
-// Looks up whether this level is configured as "Recommending Approval"
-// (Immediate Supervisor / Department Head) or "Approving Authority"
-// (Division Head / Director / Executive / Authorized Official) — this is
-// what decides which signature box the report prints it into.
-async function lookupApprovalType(order, assignment) {
-  let query = sb
-    .from("approval_levels")
-    .select("approval_type")
-    .eq("official_station_id", order.official_station_id)
-    .eq("level_no", order.current_level);
-
-  query = order.request_type_id
-    ? query.or(`request_type_id.eq.${order.request_type_id},request_type_id.is.null`)
-    : query.is("request_type_id", null);
-
-  const { data } = await query
-    .order("request_type_id", { ascending: true, nullsFirst: false }) // prefer the specific-type row over the catch-all
-    .limit(1)
-    .maybeSingle();
-  return data?.approval_type || "recommending";
 }
 
 async function loadHistory() {
@@ -289,16 +265,12 @@ async function applyDecision(order, action, remarks) {
   const assignment = myAssignmentFor(order);
   if (!assignment) throw new Error("Your approver assignment for this level could not be found.");
 
-  const approvalType = await lookupApprovalType(order, assignment);
-
-  // 1. Write immutable approval_history record with a SNAPSHOT of the
-  //    signature AND the configured approval role (Recommending Approval vs
-  //    Approving Authority), so both stay fixed even if config changes later.
+  // 1. Write immutable approval_history record with a SNAPSHOT of the signature
+  //    (so future signature updates never alter past documents).
   const { error: histErr } = await sb.from("approval_history").insert({
     travel_order_id: order.id,
     approver_id: assignment.id,
     level_no: order.current_level,
-    approval_type: approvalType,
     action,
     remarks,
     approver_name_snapshot: PROFILE.full_name,

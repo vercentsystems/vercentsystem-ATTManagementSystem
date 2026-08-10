@@ -1,7 +1,7 @@
 import { sb } from "./supabaseClient.js";
 import { SIGNATURES_BUCKET } from "./config.js";
 import {
-  requireRole, renderShell, getAccessibleDestinations, toast, fmtDate, escapeHtml,
+  requireRole, renderShell, toast, fmtDate, escapeHtml,
   statusBadge, openModal, closeModal, wireModalDismiss, qs, qsa,
 } from "./utils.js";
 
@@ -50,14 +50,24 @@ async function init() {
   if (!auth) return;
   PROFILE = auth.profile;
 
+  // Admins who are ALSO assigned as an approver (a row in `approvers` with
+  // their employee_id) get a shortcut into the Approvals dashboard — that
+  // page's own access check (requireRole(["approver","admin"])) already
+  // allows admins in, this just surfaces the link.
+  const { count: approverAssignments } = await sb
+    .from("approvers")
+    .select("id", { count: "exact", head: true })
+    .eq("employee_id", PROFILE.id)
+    .eq("status", "active");
+
   const navLinks = SECTIONS.map((s, i) => ({ href: `#${s.id}`, icon: s.icon, label: s.label, active: i === 0 }));
-  const destinations = await getAccessibleDestinations(PROFILE);
+  if (approverAssignments > 0) {
+    navLinks.push({ href: "approver.html", icon: "✅", label: "My Approvals", active: false });
+  }
 
   renderShell({
     profile: PROFILE,
     brandSub: "Administrator",
-    destinations,
-    currentPage: "admin.html",
     links: navLinks,
   });
   wireNav();
@@ -366,31 +376,12 @@ function renderLevels() {
       <td data-label="Official Station">${escapeHtml(l.official_stations?.name || "—")}</td>
       <td data-label="Request Type">${escapeHtml(l.request_types?.name || "All types")}</td>
       <td data-label="Level">${l.level_no}</td>
-      <td data-label="Approval Type">${approvalTypeLabel(l.approval_type)}</td>
       <td data-label="Label">${escapeHtml(l.label)}</td>
       <td data-label="Effective">${fmtDate(l.effective_date)}</td>
       <td data-label="Status">${l.status === "active" ? "<span class='badge badge-approved'>Active</span>" : "<span class='badge badge-cancelled'>Inactive</span>"}</td>
       <td data-label="Actions" class="actions"><button class="btn btn-ghost btn-sm" data-edit="${l.id}">Edit</button></td>
-    </tr>`).join("") : `<tr class="empty-row"><td colspan="8">No approval levels configured yet.</td></tr>`;
+    </tr>`).join("") : `<tr class="empty-row"><td colspan="7">No approval levels configured yet.</td></tr>`;
   qsa("[data-edit]", tbody).forEach(b => b.addEventListener("click", () => openLevelForm(b.dataset.edit)));
-}
-
-function approvalTypeLabel(type) {
-  return type === "approving"
-    ? "<span class='badge badge-approved'>Approving Authority</span>"
-    : "<span class='badge badge-submitted'>Recommending Approval</span>";
-}
-
-// Looks up the Approval Type configured for a given approver assignment by
-// matching its (official_station, level_no, request_type) against LEVELS —
-// keeps Approvers from needing to duplicate/desync this setting.
-function approvalTypeForApprover(a) {
-  const match = LEVELS.find(l =>
-    l.official_station_id === a.official_station_id &&
-    l.level_no === a.level_no &&
-    (l.request_type_id === a.request_type_id || (!l.request_type_id && !a.request_type_id))
-  ) || LEVELS.find(l => l.official_station_id === a.official_station_id && l.level_no === a.level_no);
-  return match?.approval_type || "recommending";
 }
 
 function openLevelForm(id) {
@@ -401,14 +392,6 @@ function openLevelForm(id) {
     <div class="field" style="margin-bottom:12px"><label>Official Station</label><select id="lv-station">${STATIONS.map(d => `<option value="${d.id}" ${l?.official_station_id === d.id ? "selected" : ""}>${escapeHtml(d.name)}</option>`).join("")}</select></div>
     <div class="field" style="margin-bottom:12px"><label>Request Type</label><select id="lv-type"></select></div>
     <div class="field" style="margin-bottom:12px"><label>Level No.</label><input type="number" id="sv-level" min="1" value="${l?.level_no || 1}"></div>
-    <div class="field" style="margin-bottom:12px">
-      <label>Approval Type</label>
-      <select id="lv-approval-type">
-        <option value="recommending" ${(!l || l.approval_type === "recommending") ? "selected" : ""}>Recommending Approval</option>
-        <option value="approving" ${l?.approval_type === "approving" ? "selected" : ""}>Approving Authority</option>
-      </select>
-      <span class="hint" id="lv-approval-type-hint"></span>
-    </div>
     <div class="field" style="margin-bottom:12px"><label>Label</label><input type="text" id="sv-label" value="${escapeHtml(l?.label || "")}" placeholder="e.g. School Head"></div>
     <div class="field" style="margin-bottom:12px"><label>Effective Date</label><input type="date" id="sv-effective" value="${l?.effective_date || new Date().toISOString().slice(0, 10)}"></div>
     <div class="field"><label>Status</label>
@@ -417,21 +400,11 @@ function openLevelForm(id) {
   fillTypeSelects();
   if (l?.request_type_id) document.getElementById("lv-type").value = l.request_type_id;
 
-  const typeSel = document.getElementById("lv-approval-type");
-  const updateTypeHint = () => {
-    document.getElementById("lv-approval-type-hint").textContent = typeSel.value === "approving"
-      ? "Prints in the \"Approved\" box — e.g. Division Head, Director, Executive, or other Authorized Official."
-      : "Prints in the \"Recommending Approval\" box — e.g. Immediate Supervisor or Department Head.";
-  };
-  typeSel.addEventListener("change", updateTypeHint);
-  updateTypeHint();
-
   bindSimpleSave(async () => {
     const payload = {
       official_station_id: document.getElementById("lv-station").value,
       request_type_id: document.getElementById("lv-type").value || null,
       level_no: parseInt(document.getElementById("sv-level").value, 10),
-      approval_type: document.getElementById("lv-approval-type").value,
       label: document.getElementById("sv-label").value.trim(),
       effective_date: document.getElementById("sv-effective").value,
       status: document.getElementById("sv-status").value,
@@ -538,14 +511,13 @@ function renderApprovers() {
     <tr>
       <td data-label="Approver">${escapeHtml(a.employees?.full_name || "—")}</td>
       <td data-label="Official Station">${escapeHtml(a.official_stations?.name || "—")}</td>
-      <td data-label="Request Type">${escapeHtml(a.request_types?.name || "All types")}</td>
+      <td data-label="Type">${escapeHtml(a.request_types?.name || "All types")}</td>
       <td data-label="Level">${a.level_no}</td>
-      <td data-label="Approval Role">${approvalTypeLabel(approvalTypeForApprover(a))}</td>
       <td data-label="Position">${escapeHtml(a.position_title || "—")}</td>
       <td data-label="Signature">${a.signature_url ? `<img src="${a.signature_url}" alt="signature" style="height:26px">` : "<span class='muted'>None</span>"}</td>
       <td data-label="Status">${a.status === "active" ? "<span class='badge badge-approved'>Active</span>" : "<span class='badge badge-cancelled'>Inactive</span>"}</td>
       <td data-label="Actions" class="actions"><button class="btn btn-ghost btn-sm" data-edit="${a.id}">Edit</button></td>
-    </tr>`).join("") : `<tr class="empty-row"><td colspan="9">No approvers assigned yet.</td></tr>`;
+    </tr>`).join("") : `<tr class="empty-row"><td colspan="8">No approvers assigned yet.</td></tr>`;
   qsa("[data-edit]", tbody).forEach(b => b.addEventListener("click", () => openApproverForm(b.dataset.edit)));
 }
 

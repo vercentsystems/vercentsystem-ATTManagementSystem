@@ -7,8 +7,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=UnifrakturCook:wght@700&family=IM+Fell+English+SC&family=EB+Garamond:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/report.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body class="report-body">
 
@@ -17,25 +15,7 @@
     <div class="rt-left" id="rt-status">Loading document…</div>
     <div class="rt-actions">
       <button id="btn-back" onclick="history.back()">&larr; Back</button>
-      <button id="btn-download">Download PDF (password-protected)</button>
       <button class="primary" id="btn-print">Print / Save as PDF</button>
-    </div>
-  </div>
-
-  <!-- Password prompt for encrypted PDF download (screen only) -->
-  <div class="dl-overlay" id="dl-overlay">
-    <div class="dl-modal">
-      <h3>Protect &amp; Download PDF</h3>
-      <p>Set a password required to open this file. Share it with the recipient through a separate channel (not alongside the PDF itself).</p>
-      <label for="dl-password">Password</label>
-      <input type="password" id="dl-password" placeholder="At least 6 characters" autocomplete="new-password">
-      <label for="dl-password-confirm">Confirm password</label>
-      <input type="password" id="dl-password-confirm" placeholder="Re-enter password" autocomplete="new-password">
-      <div class="dl-error" id="dl-error"></div>
-      <div class="dl-actions">
-        <button id="dl-cancel">Cancel</button>
-        <button id="dl-confirm" class="primary">Download</button>
-      </div>
     </div>
   </div>
 

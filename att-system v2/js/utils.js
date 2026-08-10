@@ -122,49 +122,15 @@ export async function signOut() {
   window.location.href = "index.html";
 }
 
-/* ---------------------------- Role switcher ------------------------------ */
-// Figures out which top-level dashboards this user can actually get to.
-// Everyone can file their own requests, so "My Requests" is always included.
-// "Approvals" shows for approver-role users always, and for admins only if
-// they also have an active approver assignment (avoids clutter otherwise).
-// "Admin Console" shows only for admin-role users.
-export async function getAccessibleDestinations(profile) {
-  const dest = [{ href: "employee.html", icon: "🧾", label: "My Requests" }];
-
-  if (profile.role === "approver") {
-    dest.push({ href: "approver.html", icon: "✅", label: "Approvals" });
-  } else if (profile.role === "admin") {
-    const { count } = await sb
-      .from("approvers")
-      .select("id", { count: "exact", head: true })
-      .eq("employee_id", profile.id)
-      .eq("status", "active");
-    if (count > 0) dest.push({ href: "approver.html", icon: "✅", label: "Approvals" });
-  }
-
-  if (profile.role === "admin") {
-    dest.push({ href: "admin.html", icon: "🛠", label: "Admin Console" });
-  }
-
-  return dest;
-}
-
 /* ---------------------------- Shell (sidebar/topbar) --------------------- */
 // Renders the sidebar + mobile topbar into #shell-sidebar / #shell-topbar
 // placeholders. `links` = [{href, icon, label, active}]
-export function renderShell({ profile, brandSub, links, destinations, currentPage }) {
-  const showSwitcher = destinations && destinations.length > 1;
-  const roleAreaHtml = showSwitcher
-    ? `<select class="role-switcher" id="role-switcher" aria-label="Switch view">
-        ${destinations.map(d => `<option value="${d.href}" ${d.href === currentPage ? "selected" : ""}>${escapeHtml(d.label)}</option>`).join("")}
-      </select>`
-    : `<span>${escapeHtml(brandSub)}</span>`;
-
+export function renderShell({ profile, brandSub, links }) {
   const sidebarHtml = `
     <div class="sidebar" id="sidebar">
       <div class="brand">
         <div class="brand-mark">AT</div>
-        <div class="brand-text"><strong>Authority to Travel</strong>${roleAreaHtml}</div>
+        <div class="brand-text"><strong>Authority to Travel</strong><span>${escapeHtml(brandSub)}</span></div>
       </div>
       <nav>
         ${links.map(l => `
@@ -193,12 +159,6 @@ export function renderShell({ profile, brandSub, links, destinations, currentPag
   `;
   document.getElementById("shell-sidebar").innerHTML = sidebarHtml;
   document.getElementById("shell-topbar").innerHTML = topbarHtml;
-
-  if (showSwitcher) {
-    document.getElementById("role-switcher").addEventListener("change", (e) => {
-      window.location.href = e.target.value;
-    });
-  }
 
   document.getElementById("btn-signout").addEventListener("click", signOut);
   const sidebar = document.getElementById("sidebar");

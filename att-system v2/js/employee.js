@@ -1,6 +1,6 @@
 import { sb } from "./supabaseClient.js";
 import {
-  requireRole, renderShell, getAccessibleDestinations, toast, fmtDate, escapeHtml,
+  requireRole, renderShell, toast, fmtDate, escapeHtml,
   statusBadge, openModal, closeModal, wireModalDismiss, qs, qsa,
 } from "./utils.js";
 
@@ -34,12 +34,9 @@ async function init() {
   if (!auth) return;
   PROFILE = auth.profile;
 
-  const destinations = await getAccessibleDestinations(PROFILE);
   renderShell({
     profile: PROFILE,
     brandSub: "Employee",
-    destinations,
-    currentPage: "employee.html",
     links: [
       { href: "employee.html", icon: "🧾", label: "My Requests", active: true },
     ],
