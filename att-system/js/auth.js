@@ -62,27 +62,19 @@ formSignup.addEventListener("submit", async (e) => {
   const email = document.getElementById("su-email").value.trim();
   const password = document.getElementById("su-password").value;
 
-  const { data, error } = await sb.auth.signUp({ email, password });
+  // full_name / employee_no travel as auth user metadata. A database trigger
+  // (see sql/schema.sql: handle_new_user) creates the matching `employees`
+  // profile row server-side — this works whether or not "Confirm email" is
+  // enabled, avoiding an RLS failure from inserting before a session exists.
+  const { data, error } = await sb.auth.signUp({
+    email, password,
+    options: { data: { full_name, employee_no } },
+  });
+
   if (error) {
     showAlert(error.message);
     btn.disabled = false; btn.textContent = "Create account";
     return;
-  }
-
-  if (data.user) {
-    const { error: profErr } = await sb.from("employees").insert({
-      id: data.user.id,
-      employee_no: employee_no || null,
-      full_name,
-      email,
-      role: "employee",
-      status: "active",
-    });
-    if (profErr) {
-      showAlert("Account created, but profile setup failed: " + profErr.message);
-      btn.disabled = false; btn.textContent = "Create account";
-      return;
-    }
   }
 
   if (data.session) {

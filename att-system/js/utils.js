@@ -63,11 +63,34 @@ export async function requireRole(allowedRoles) {
     window.location.href = "index.html";
     return null;
   }
-  const { data: profile, error } = await sb
+  let { data: profile, error } = await sb
     .from("employees")
     .select("*, divisions(name, code)")
     .eq("id", session.user.id)
     .maybeSingle();
+
+  // Self-heal: a session exists (so auth.uid() now resolves correctly) but
+  // no profile row was found — most likely the signup trigger hasn't run
+  // yet, or this account predates it. Create the row now rather than
+  // bouncing the user back to the login screen.
+  if (!error && !profile) {
+    const meta = session.user.user_metadata || {};
+    const { error: healErr } = await sb.from("employees").insert({
+      id: session.user.id,
+      employee_no: meta.employee_no || null,
+      full_name: meta.full_name || session.user.email,
+      email: session.user.email,
+      role: "employee",
+      status: "active",
+    });
+    if (!healErr) {
+      ({ data: profile, error } = await sb
+        .from("employees")
+        .select("*, divisions(name, code)")
+        .eq("id", session.user.id)
+        .maybeSingle());
+    }
+  }
 
   if (error || !profile) {
     toast("We couldn't load your profile. Please sign in again.", "bad");
