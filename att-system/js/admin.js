@@ -50,10 +50,25 @@ async function init() {
   if (!auth) return;
   PROFILE = auth.profile;
 
+  // Admins who are ALSO assigned as an approver (a row in `approvers` with
+  // their employee_id) get a shortcut into the Approvals dashboard — that
+  // page's own access check (requireRole(["approver","admin"])) already
+  // allows admins in, this just surfaces the link.
+  const { count: approverAssignments } = await sb
+    .from("approvers")
+    .select("id", { count: "exact", head: true })
+    .eq("employee_id", PROFILE.id)
+    .eq("status", "active");
+
+  const navLinks = SECTIONS.map((s, i) => ({ href: `#${s.id}`, icon: s.icon, label: s.label, active: i === 0 }));
+  if (approverAssignments > 0) {
+    navLinks.push({ href: "approver.html", icon: "✅", label: "My Approvals", active: false });
+  }
+
   renderShell({
     profile: PROFILE,
     brandSub: "Administrator",
-    links: SECTIONS.map((s, i) => ({ href: `#${s.id}`, icon: s.icon, label: s.label, active: i === 0 })),
+    links: navLinks,
   });
   wireNav();
   wireModals();
@@ -68,9 +83,11 @@ async function init() {
 /* ------------------------------- Navigation ------------------------------ */
 function wireNav() {
   qsa("#sidebar .nav-link").forEach(link => {
+    const href = link.getAttribute("href");
+    if (!href.startsWith("#")) return; // real page link (e.g. approver.html) — let it navigate normally
     link.addEventListener("click", (e) => {
       e.preventDefault();
-      const id = link.getAttribute("href").replace("#", "");
+      const id = href.replace("#", "");
       showSection(id);
       qsa("#sidebar .nav-link").forEach(l => l.classList.remove("active"));
       link.classList.add("active");
