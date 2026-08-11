@@ -1,9 +1,6 @@
 import { sb } from "./supabaseClient.js";
 import { requireRole, fmtDate, fmtDateTime, escapeHtml } from "./utils.js";
 
-const CHECKED = "&#9746;"; // ☒
-const UNCHECKED = "&#9744;"; // ☐
-
 let CURRENT_ORDER = null;
 
 init();
@@ -36,7 +33,9 @@ async function init() {
     .eq("travel_order_id", id)
     .order("action_date");
 
-  populate(order, history || []);
+  const levels = await fetchApprovalLevels(order);
+
+  populate(order, history || [], levels);
 
   statusLine.textContent = order.status === "approved"
     ? `${order.control_no} — Approved · Ready to print`
@@ -44,6 +43,135 @@ async function init() {
 
   document.getElementById("btn-print").addEventListener("click", () => window.print());
   wireDownloadModal();
+}
+
+// The role label (e.g. "Assistant Schools Division Superintendent") is a
+// fixed part of each Approval Level's configuration in Admin — it should
+// always print, whether or not that role has acted on this request yet.
+// Only the specific person's name/signature/date depends on an actual
+// maintained approver having approved. Prefers a level scoped to this
+// request's specific request type over a catch-all (request_type_id null)
+// level, same precedence used when routing the request itself.
+async function fetchApprovalLevels(order) {
+  let query = sb
+    .from("approval_levels")
+    .select("level_no, approval_type, label, request_type_id")
+    .eq("official_station_id", order.official_station_id)
+    .eq("status", "active");
+
+  query = order.request_type_id
+    ? query.or(`request_type_id.eq.${order.request_type_id},request_type_id.is.null`)
+    : query.is("request_type_id", null);
+
+  const { data } = await query.order("level_no");
+  return data || [];
+}
+
+// Default role titles for this deployment (Schools Division of Nueva
+// Vizcaya) — used only when the matching Approval Level has no Label set,
+// so the report reads correctly out of the box. Admins can still override
+// either by setting the Label field in Admin → Approval Levels.
+const DEFAULT_ROLE_LABEL = {
+  recommending: "Assistant Schools Division Superintendent",
+  approving: "Schools Division Superintendent",
+};
+
+function pickLevelLabel(levels, type, requestTypeId) {
+  const specific = requestTypeId && levels.find(l => l.approval_type === type && l.request_type_id === requestTypeId);
+  const fallback = levels.find(l => l.approval_type === type);
+  return (specific || fallback)?.label || DEFAULT_ROLE_LABEL[type] || "";
+}
+
+function set(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = value ?? "";
+}
+function fmtInclusiveDates(from, to) {
+  if (!from) return "";
+  if (!to || to === from) return fmtDate(from);
+  return `${fmtDate(from)} to ${fmtDate(to)}`;
+}
+function fundSourceText(fs) {
+  if (!fs) return "";
+  const parts = [];
+  if (fs.local_funds) parts.push("Local Funds");
+  if (fs.sub_aro) parts.push(`Sub-ARO${fs.sub_aro_no ? " No. " + fs.sub_aro_no : ""}`);
+  if (fs.hrtd) parts.push("HRTD");
+  if (fs.others) parts.push(fs.others_text || "Others");
+  return parts.join(" / ");
+}
+
+function populate(o, history, levels) {
+  set("v-employee-name", (o.employees?.full_name || "").toUpperCase());
+  set("v-position", o.position || o.employees?.position || "");
+  set("v-station", o.official_station || o.official_stations?.name || "");
+  set("v-purpose", o.purpose || "");
+  set("v-host", o.activity_sponsor || "");
+  set("v-dates", fmtInclusiveDates(o.travel_date_from, o.travel_date_to));
+  set("v-destination", o.destination || "");
+  set("v-fund-source", fundSourceText(o.fund_source));
+
+  // Employee attestation line — name is known, so it's printed; the actual
+  // wet signature still happens on the physical/printed copy.
+  set("v-employee-sig-name", o.employees?.full_name || "");
+  set("v-employee-sig-date", o.filing_date ? fmtDate(o.filing_date) : "\u00A0");
+
+  buildApprovalSections(o, history, levels);
+  buildLog(history);
+
+  set("v-generated-date", fmtDateTime(new Date()));
+  set("v-page-controlno", o.control_no ? `Control No. ${o.control_no}` : "");
+}
+
+// The template's two approval roles — Recommending (the certification
+// paragraph) and Approved — each print the maintained approver's name,
+// signature image, position, and decision date directly (these officials
+// are standing roles, so their name is expected to already be legible on
+// the template, not hidden behind a blank captioned line the way the
+// employee's signature is). Neither is required: if a role was never
+// maintained/configured for this station, its block simply stays blank.
+function buildApprovalSections(o, history, levels) {
+  const approvals = history.filter(h => h.action === "approved");
+  const latestOfType = (type) => [...approvals].reverse().find(h => h.approval_type === type);
+
+  fillApprovalBlock("recommend", latestOfType("recommending"), pickLevelLabel(levels, "recommending", o.request_type_id));
+  fillApprovalBlock("approved", latestOfType("approving"), pickLevelLabel(levels, "approving", o.request_type_id));
+}
+
+function fillApprovalBlock(prefix, rec, roleLabel) {
+  const imgWrap = document.getElementById(`v-${prefix}-sig-img`);
+  const nameEl = document.getElementById(`v-${prefix}-name`);
+  const roleEl = document.getElementById(`v-${prefix}-role`);
+  const dateEl = document.getElementById(`v-${prefix}-date`);
+
+  // Role label is always the configured Approval Level label — not
+  // required to have anyone maintained yet.
+  roleEl.textContent = roleLabel || "";
+
+  if (rec) {
+    imgWrap.innerHTML = rec.signature_snapshot_url ? `<img src="${rec.signature_snapshot_url}" alt="signature">` : "";
+    nameEl.textContent = rec.approver_name_snapshot.toUpperCase();
+    dateEl.textContent = fmtDate(rec.action_date);
+  } else {
+    imgWrap.innerHTML = "";
+    nameEl.innerHTML = "&nbsp;";
+    dateEl.innerHTML = "&nbsp;";
+  }
+}
+
+function buildLog(history) {
+  const body = document.getElementById("v-log-body");
+  body.innerHTML = history.length
+    ? history.map(h => `
+      <tr>
+        <td>${h.level_no}</td>
+        <td>${escapeHtml(h.approver_name_snapshot)}</td>
+        <td>${escapeHtml(h.approver_position_snapshot)}</td>
+        <td>${h.action.toUpperCase()}</td>
+        <td>${fmtDate(h.action_date)}</td>
+        <td>${escapeHtml(h.remarks || "—")}</td>
+      </tr>`).join("")
+    : `<tr><td colspan="6" style="text-align:center;color:#555">No approval activity yet</td></tr>`;
 }
 
 /* ------------------------- Password-protected download ------------------ */
@@ -83,12 +211,6 @@ function wireDownloadModal() {
   });
 }
 
-// Renders the fixed report layout to an image (html2canvas), then embeds it
-// into a Letter-size PDF using jsPDF's built-in encryption — the resulting
-// file requires the given password to open. This is a client-side, best-
-// effort protection (no backend in this app to do it server-side); the
-// underlying PDF encryption strength depends on the loaded jsPDF version,
-// so test opening the downloaded file in your target PDF reader.
 async function generateEncryptedPdf(order, password) {
   if (!window.html2canvas || !window.jspdf) {
     throw new Error("PDF library failed to load — check your internet connection and try again.");
@@ -110,115 +232,6 @@ async function generateEncryptedPdf(order, password) {
     },
   });
 
-  // Letter page = 612 x 792 pt; canvas already matches the page's aspect
-  // ratio since it's a snapshot of the fixed 8.5in x 11in .paper element.
   doc.addImage(imgData, "PNG", 0, 0, 612, 792);
   doc.save(`${order.control_no || "ATT-draft"}.pdf`);
-}
-
-function set(id, value) {
-  const el = document.getElementById(id);
-  if (el) el.textContent = value ?? "";
-}
-function setChk(id, on) {
-  const el = document.getElementById(id);
-  if (el) el.innerHTML = on ? CHECKED : UNCHECKED;
-}
-function fmtTravelDate(from, to) {
-  if (!from) return "";
-  if (!to || to === from) return fmtDate(from);
-  return `${fmtDate(from)} – ${fmtDate(to)}`;
-}
-
-function populate(o, history) {
-  set("v-filing-date", fmtDate(o.filing_date));
-  set("v-employee-name", (o.employees?.full_name || "").toUpperCase());
-  set("v-position", o.position || o.employees?.position || "");
-  set("v-emp-remarks", "");
-
-  const companions = Array.isArray(o.companions) ? o.companions : [];
-  set("v-comp1-name", companions[0]?.name ? companions[0].name.toUpperCase() : "");
-  set("v-comp1-position", companions[0]?.position || "");
-  set("v-comp2-name", companions[1]?.name ? companions[1].name.toUpperCase() : "");
-  set("v-comp2-position", companions[1]?.position || "");
-
-  set("v-official-station", (o.official_station || o.official_stations?.name || "").toUpperCase());
-  set("v-destination", (o.destination || "").toUpperCase());
-  set("v-travel-date", fmtTravelDate(o.travel_date_from, o.travel_date_to).toUpperCase());
-  set("v-purpose", o.purpose || "");
-  set("v-activity", o.activity_sponsor || "");
-
-  setChk("v-chk-business", o.travel_on === "official_business");
-  setChk("v-chk-official-time", o.travel_on === "official_time");
-
-  const lb = o.legal_basis || {};
-  setChk("v-chk-deped-memo", !!lb.deped_memo);
-  setChk("v-chk-deped-advisory", !!lb.deped_advisory);
-  setChk("v-chk-invitation", !!lb.invitation_letter);
-  setChk("v-chk-legal-others", !!lb.others);
-  set("v-legal-others-text", lb.others_text || "");
-
-  set("v-expenses-covered", o.expenses_covered || "");
-
-  const fs = o.fund_source || {};
-  setChk("v-chk-local-funds", !!fs.local_funds);
-  setChk("v-chk-sub-aro", !!fs.sub_aro);
-  set("v-sub-aro-no", fs.sub_aro_no || "");
-  setChk("v-chk-hrtd", !!fs.hrtd);
-  setChk("v-chk-fund-others", !!fs.others);
-  set("v-fund-others-text", fs.others_text || "");
-
-  setChk("v-chk-gov-vehicle", !!o.with_government_vehicle);
-  setChk("v-chk-reg-fee", !!o.with_registration_fee);
-
-  buildApprovalCells(o, history);
-  buildLog(history);
-
-  set("v-generated-date", fmtDateTime(new Date()));
-  set("v-page-controlno", o.control_no ? `Control No. ${o.control_no}` : "");
-}
-
-// Official form has exactly two signature slots: "Recommending Approval"
-// (Immediate Supervisor / Department Head) and "Approved" (Approving
-// Authority — Division Head / Director / Executive / Authorized Official).
-// Each approval_history row carries its own approval_type snapshot, taken
-// at the moment it was recorded, so this never depends on level numbering
-// or on the current approval_levels configuration.
-function buildApprovalCells(o, history) {
-  const approvals = history.filter(h => h.action === "approved");
-  const latestOfType = (type) => [...approvals].reverse().find(h => h.approval_type === type);
-
-  document.getElementById("v-recommend-cell").innerHTML = signatureCellHtml(latestOfType("recommending"));
-  document.getElementById("v-approved-cell").innerHTML = signatureCellHtml(latestOfType("approving"));
-}
-
-// The caption labels — "(name, position, and signature)" and "Date:" — are
-// fixed parts of the official form and always print, exactly as they do on
-// the blank paper form. Only the actual value (name, signature image, date)
-// is optional: it's filled in when that role has been maintained and acted
-// on, and left blank otherwise. No value is ever "required" to print the box.
-function signatureCellHtml(rec) {
-  return `
-    <div class="sig-img-wrap">${rec?.signature_snapshot_url ? `<img src="${rec.signature_snapshot_url}" alt="signature">` : ""}</div>
-    <div class="sig-line">
-      ${rec ? `<div class="sig-name">${escapeHtml(rec.approver_name_snapshot)}, ${escapeHtml(rec.approver_position_snapshot)}</div>` : ""}
-      <div class="sig-hint">(name, position, and signature)</div>
-    </div>
-    <div class="sig-date">Date: <span class="fill-blank">${rec ? fmtDate(rec.action_date) : "&nbsp;"}</span></div>
-  `;
-}
-
-function buildLog(history) {
-  const body = document.getElementById("v-log-body");
-  body.innerHTML = history.length
-    ? history.map(h => `
-      <tr>
-        <td>${h.level_no}</td>
-        <td>${escapeHtml(h.approver_name_snapshot)}</td>
-        <td>${escapeHtml(h.approver_position_snapshot)}</td>
-        <td>${h.action.toUpperCase()}</td>
-        <td>${fmtDate(h.action_date)}</td>
-        <td>${escapeHtml(h.remarks || "—")}</td>
-      </tr>`).join("")
-    : `<tr><td colspan="6" style="text-align:center;color:#555">No approval activity yet</td></tr>`;
 }
