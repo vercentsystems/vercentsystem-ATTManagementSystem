@@ -3,6 +3,7 @@ import {
   requireRole, renderShell, getAccessibleDestinations, toast, fmtDate, escapeHtml,
   statusBadge, openModal, closeModal, wireModalDismiss, qs, qsa,
 } from "./utils.js";
+import { listAttachments, uploadAttachment, deleteAttachment, renderAttachmentsList } from "./attachments.js";
 
 function legalBasisText(lb) {
   if (!lb) return "—";
@@ -54,6 +55,7 @@ async function init() {
   document.getElementById("btn-add-companion").addEventListener("click", () => addCompanionRow());
   document.getElementById("btn-save-draft").addEventListener("click", () => saveRequest("draft"));
   document.getElementById("btn-submit-req").addEventListener("click", () => saveRequest("submitted"));
+  document.getElementById("f-attachment-file").addEventListener("change", handleAttachmentUpload);
   document.getElementById("filter-status").addEventListener("change", renderTable);
 
   await loadRequestTypes();
@@ -125,9 +127,11 @@ function resetForm() {
   document.getElementById("f-filing-date").value = new Date().toISOString().slice(0, 10);
   document.getElementById("f-employee-name").value = PROFILE.full_name;
   document.getElementById("f-position").value = PROFILE.position || "";
-  document.getElementById("f-station").value = PROFILE.official_stations?.name || "Not yet assigned";
+  document.getElementById("f-station").value = PROFILE.official_stations?.name || "";
+  document.getElementById("f-station").placeholder = PROFILE.official_stations?.name ? "" : "Not yet assigned — contact your administrator";
   document.getElementById("f-companions").innerHTML = "";
   document.querySelector('input[name="f-travel-on"][value="official_business"]').checked = true;
+  refreshAttachmentsUI();
 }
 
 function openNewForm() {
@@ -177,7 +181,65 @@ function openEditForm(id) {
   document.getElementById("f-companions").innerHTML = "";
   (o.companions || []).forEach(c => addCompanionRow(c.name, c.position));
 
+  refreshAttachmentsUI();
   openModal("overlay-form");
+}
+
+/* ------------------------------- Attachments --------------------------- */
+async function refreshAttachmentsUI() {
+  const id = document.getElementById("f-id").value;
+  const listEl = document.getElementById("f-attachments-list");
+  const uploadEl = document.getElementById("f-attachments-upload");
+  const hintEl = document.getElementById("f-attachments-hint");
+
+  if (!id) {
+    listEl.innerHTML = "";
+    uploadEl.style.display = "none";
+    hintEl.style.display = "block";
+    return;
+  }
+  uploadEl.style.display = "block";
+  hintEl.style.display = "none";
+  listEl.innerHTML = `<p class="muted" style="margin:6px 0">Loading…</p>`;
+  try {
+    const files = await listAttachments(id);
+    renderAttachmentsList(listEl, files, { editable: true, onDelete: handleAttachmentDelete });
+  } catch (err) {
+    listEl.innerHTML = `<p class="muted" style="margin:6px 0">Failed to load attachments.</p>`;
+  }
+}
+
+async function handleAttachmentUpload(e) {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+
+  const id = document.getElementById("f-id").value;
+  if (!id) {
+    toast("Save this request as a draft first, then attach files.", "bad");
+    return;
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    toast("File is too large — please keep attachments under 10 MB.", "bad");
+    return;
+  }
+  try {
+    await uploadAttachment(id, file, PROFILE.id);
+    toast("File attached.", "ok");
+    await refreshAttachmentsUI();
+  } catch (err) {
+    toast("Upload failed: " + err.message, "bad");
+  }
+}
+
+async function handleAttachmentDelete(attachment) {
+  try {
+    await deleteAttachment(attachment);
+    toast("Attachment removed.", "ok");
+    await refreshAttachmentsUI();
+  } catch (err) {
+    toast("Failed to remove attachment: " + err.message, "bad");
+  }
 }
 
 function addCompanionRow(name = "", position = "") {
@@ -263,6 +325,7 @@ async function saveRequest(targetStatus) {
 
   try {
     let orderId = id;
+    const isNewRecord = !id;
     if (id) {
       const { error } = await sb.from("travel_orders").update(payload).eq("id", id);
       if (error) throw error;
@@ -275,11 +338,19 @@ async function saveRequest(targetStatus) {
 
     if (targetStatus === "submitted") {
       await submitForApproval(orderId);
+      closeModal("overlay-form");
+    } else if (isNewRecord) {
+      // Keep the form open so attachments can be added right away, instead
+      // of forcing a close-and-reopen just to attach supporting documents.
+      document.getElementById("f-id").value = orderId;
+      document.getElementById("form-title").textContent = "Edit Authority to Travel Request";
+      await refreshAttachmentsUI();
+      toast("Draft saved. You can now attach supporting documents below.", "ok");
     } else {
       toast("Draft saved.", "ok");
+      closeModal("overlay-form");
     }
 
-    closeModal("overlay-form");
     await loadOrders();
   } catch (err) {
     toast("Save failed: " + err.message, "bad");
@@ -364,9 +435,16 @@ async function viewDetail(id) {
       }</div></div>
     </div>
 
+    <h4 style="margin-top:16px">Attachments</h4>
+    <div id="detail-attachments"><p class="muted">Loading…</p></div>
+
     <h4 style="margin-top:16px">Approval History</h4>
     ${renderTimeline(history || [])}
   `;
+
+  listAttachments(id)
+    .then(files => renderAttachmentsList(document.getElementById("detail-attachments"), files, { editable: false }))
+    .catch(() => { document.getElementById("detail-attachments").innerHTML = `<p class="muted">Failed to load attachments.</p>`; });
 
   foot.innerHTML = o.status === "approved"
     ? `<a class="btn btn-gold" href="report.html?id=${o.id}" target="_blank">View / Print Official Report</a>`

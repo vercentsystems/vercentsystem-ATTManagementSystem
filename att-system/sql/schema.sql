@@ -175,6 +175,26 @@ create table if not exists approval_history (
 create index if not exists idx_approval_history_order on approval_history(travel_order_id);
 
 -- ---------------------------------------------------------------------------
+-- 8. TRAVEL ORDER ATTACHMENTS (supporting documents — the official form
+--    says "Purpose of Travel (must be supported by attachments)"). Files
+--    live in the private `attachments` Storage bucket; this table is the
+--    metadata index. Employees can attach files to their own draft/returned
+--    requests; approvers assigned to the request and admins can view them.
+-- ---------------------------------------------------------------------------
+create table if not exists travel_order_attachments (
+  id                uuid primary key default gen_random_uuid(),
+  travel_order_id   uuid not null references travel_orders(id) on delete cascade,
+  file_name         text not null,
+  file_path         text not null,           -- object path within the 'attachments' bucket
+  file_type         text not null default '', -- mime type
+  file_size         bigint not null default 0,
+  uploaded_by       uuid not null references employees(id),
+  created_at        timestamptz not null default now()
+);
+
+create index if not exists idx_attachments_order on travel_order_attachments(travel_order_id);
+
+-- ---------------------------------------------------------------------------
 -- updated_at trigger
 -- ---------------------------------------------------------------------------
 create or replace function set_updated_at() returns trigger as $$
@@ -261,6 +281,7 @@ alter table approval_levels enable row level security;
 alter table approvers enable row level security;
 alter table travel_orders enable row level security;
 alter table approval_history enable row level security;
+alter table travel_order_attachments enable row level security;
 
 -- Reference data: any authenticated user can read; only admins write.
 create policy "read official_stations" on official_stations for select using (auth.uid() is not null);
@@ -333,6 +354,50 @@ create policy "read approval_history" on approval_history for select
 create policy "insert approval_history" on approval_history for insert
   with check (auth.uid() is not null);
 
+-- Attachments metadata: visible to the request's owner, any approver
+-- currently assigned to it (same matching rule as the request itself), and
+-- admins. Only the owner can attach/remove files, and only while the
+-- request is still editable (draft or returned).
+create policy "read attachments meta" on travel_order_attachments for select
+  using (
+    exists (
+      select 1 from travel_orders t
+      where t.id = travel_order_attachments.travel_order_id
+        and (
+          t.employee_id = auth.uid()
+          or current_role_name() = 'admin'
+          or exists (
+            select 1 from approvers a
+            where a.employee_id = auth.uid()
+              and a.status = 'active'
+              and a.official_station_id = t.official_station_id
+              and a.level_no = t.current_level
+              and (a.request_type_id is null or a.request_type_id = t.request_type_id)
+          )
+        )
+    )
+  );
+
+create policy "insert attachments meta" on travel_order_attachments for insert
+  with check (
+    exists (
+      select 1 from travel_orders t
+      where t.id = travel_order_attachments.travel_order_id
+        and t.employee_id = auth.uid()
+        and t.status in ('draft','returned')
+    )
+  );
+
+create policy "delete attachments meta" on travel_order_attachments for delete
+  using (
+    exists (
+      select 1 from travel_orders t
+      where t.id = travel_order_attachments.travel_order_id
+        and t.employee_id = auth.uid()
+        and t.status in ('draft','returned')
+    )
+  );
+
 -- ---------------------------------------------------------------------------
 -- STORAGE: e-signature bucket
 -- ---------------------------------------------------------------------------
@@ -351,6 +416,66 @@ create policy "admin update signatures" on storage.objects for update
 
 create policy "admin delete signatures" on storage.objects for delete
   using (bucket_id = 'signatures' and current_role_name() = 'admin');
+
+-- ---------------------------------------------------------------------------
+-- STORAGE: attachments bucket (private — supporting documents)
+-- Object paths are `<travel_order_id>/<uuid>-<filename>`, so policies can
+-- join back to travel_orders using the first path segment (foldername) to
+-- decide access, mirroring travel_orders'/travel_order_attachments' own
+-- RLS exactly. Unlike signatures, this bucket is NOT public: every read
+-- goes through a signed URL that itself only works if these policies allow
+-- the requesting user through.
+-- ---------------------------------------------------------------------------
+insert into storage.buckets (id, name, public)
+values ('attachments','attachments', false)
+on conflict (id) do nothing;
+
+create or replace function attachment_travel_order_id(object_name text) returns uuid as $$
+  select nullif((string_to_array(object_name, '/'))[1], '')::uuid;
+$$ language sql immutable;
+
+create policy "read attachments" on storage.objects for select
+  using (
+    bucket_id = 'attachments' and
+    exists (
+      select 1 from travel_orders t
+      where t.id = attachment_travel_order_id(storage.objects.name)
+        and (
+          t.employee_id = auth.uid()
+          or current_role_name() = 'admin'
+          or exists (
+            select 1 from approvers a
+            where a.employee_id = auth.uid()
+              and a.status = 'active'
+              and a.official_station_id = t.official_station_id
+              and a.level_no = t.current_level
+              and (a.request_type_id is null or a.request_type_id = t.request_type_id)
+          )
+        )
+    )
+  );
+
+create policy "insert attachments" on storage.objects for insert
+  with check (
+    bucket_id = 'attachments' and
+    exists (
+      select 1 from travel_orders t
+      where t.id = attachment_travel_order_id(storage.objects.name)
+        and t.employee_id = auth.uid()
+        and t.status in ('draft','returned')
+    )
+  );
+
+create policy "delete attachments" on storage.objects for delete
+  using (
+    bucket_id = 'attachments' and
+    exists (
+      select 1 from travel_orders t
+      where t.id = attachment_travel_order_id(storage.objects.name)
+        and t.employee_id = auth.uid()
+        and t.status in ('draft','returned')
+    )
+  );
 
 -- ---------------------------------------------------------------------------
 -- Seed a little reference data (safe to skip/edit)

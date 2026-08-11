@@ -179,6 +179,18 @@
             <label><input type="checkbox" id="f-reg-fee"> With Registration Fee</label>
           </div>
         </fieldset>
+
+        <fieldset>
+          <legend>Attachments <span class="hint">(supporting documents — required by the official form)</span></legend>
+          <div id="f-attachments-list"></div>
+          <div id="f-attachments-upload">
+            <label class="btn btn-ghost btn-sm" style="cursor:pointer;">
+              + Add file
+              <input type="file" id="f-attachment-file" style="display:none" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx">
+            </label>
+          </div>
+          <p class="hint" id="f-attachments-hint" style="display:none">Save this request as a draft first, then reopen it to attach files.</p>
+        </fieldset>
       </form>
     </div>
     <div class="modal-foot">

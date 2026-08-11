@@ -3,9 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Authority to Travel — Print</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=UnifrakturCook:wght@700&family=IM+Fell+English+SC&family=EB+Garamond:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<title>Travel Authority — Print</title>
 <link rel="stylesheet" href="css/report.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -18,6 +16,7 @@
     <div class="rt-actions">
       <button id="btn-back" onclick="history.back()">&larr; Back</button>
       <button id="btn-download">Download PDF (password-protected)</button>
+      <button id="btn-download-attachments" style="display:none">Download Attachments</button>
       <button class="primary" id="btn-print">Print / Save as PDF</button>
     </div>
   </div>
@@ -40,14 +39,16 @@
   </div>
 
   <!-- ==========================================================================
-       FIXED OFFICIAL TEMPLATE — reproduces the agency's Authority to Travel
-       form exactly. Elements with id="v-*" are the only parts JavaScript ever
-       writes to (report.js). Do not restructure this markup or its wording.
+       FIXED OFFICIAL TEMPLATE — reproduces "Travel Authority for Official
+       Travel" (Schools Division of Nueva Vizcaya) exactly. Elements with
+       id="v-*" are the only parts JavaScript ever writes to (report.js).
+       Do not restructure this markup or its wording.
 
-       LETTERHEAD (edit directly here — this is fixed letterhead text, not a
-       per-request variable): agency name, region, division/office, district,
-       office, and footer address/contact/logo. Replace assets/agency-seal.svg
-       and assets/office-logo.svg with your actual seal/logo image files.
+       LETTERHEAD (edit directly here — fixed letterhead text, not a
+       per-request variable): agency name, region, division, and footer
+       address/contact/logos. Replace assets/agency-seal.svg,
+       assets/deped-logo.svg, and assets/bagong-pilipinas-logo.svg with your
+       actual seal/logo image files.
        ========================================================================== -->
   <div class="paper" id="paper">
 
@@ -57,125 +58,98 @@
       <p class="agency">Department of Education</p>
       <p class="region">Region II &ndash; Cagayan Valley</p>
       <p class="division">Schools Division of Nueva Vizcaya</p>
-      <p class="district">Dupax Del Sur District</p>
-      <p class="place">Dupax del Sur, Nueva Vizcaya</p>
     </div>
-    <p class="office-line">Office of the School Head</p>
+    <hr class="header-rule">
 
-    <h1 class="doc-title">Authority to Travel</h1>
+    <h1 class="doc-title">Travel Authority for Official Travel</h1>
 
     <table class="att-table">
-      <colgroup><col class="c1"><col class="c2"><col class="c3"></colgroup>
+      <colgroup><col class="c1"><col class="c2"></colgroup>
       <tbody>
+        <tr><td class="lbl">Name</td><td class="val" id="v-employee-name"></td></tr>
+        <tr><td class="lbl">Position/Designation</td><td class="val" id="v-position"></td></tr>
+        <tr><td class="lbl">Permanent Station</td><td class="val" id="v-station"></td></tr>
         <tr>
-          <td class="lbl">Date of Filing:<span class="sub">(Month day, year)</span></td>
-          <td class="val" colspan="2" id="v-filing-date"></td>
+          <td class="lbl">Purpose of Travel<span class="sub">(must be supported by attachments)</span></td>
+          <td class="val" id="v-purpose"></td>
         </tr>
-        <tr>
-          <th>Name</th><th>Position/Designation</th><th>Signature/Remarks</th>
-        </tr>
-        <tr>
-          <td class="val" id="v-employee-name"></td>
-          <td class="val" id="v-position"></td>
-          <td class="val" id="v-emp-remarks"></td>
-        </tr>
-        <tr>
-          <td class="val" id="v-comp1-name"></td>
-          <td class="val" id="v-comp1-position"></td>
-          <td class="val"></td>
-        </tr>
-        <tr>
-          <td class="val" id="v-comp2-name"></td>
-          <td class="val" id="v-comp2-position"></td>
-          <td class="val"></td>
-        </tr>
-
-        <tr>
-          <td class="lbl">Official Station:</td>
-          <td class="val" colspan="2" id="v-official-station"></td>
-        </tr>
-        <tr>
-          <td class="lbl">Destination:</td>
-          <td class="val" colspan="2" id="v-destination"></td>
-        </tr>
-        <tr>
-          <td class="lbl">Date of travel:<span class="sub">(inclusive of travel time)</span></td>
-          <td class="val" colspan="2" id="v-travel-date"></td>
-        </tr>
-        <tr>
-          <td class="lbl">Purpose:</td>
-          <td class="val" colspan="2" id="v-purpose"></td>
-        </tr>
-        <tr>
-          <td class="lbl">Activity organized/<br>sponsored by:</td>
-          <td class="val" colspan="2" id="v-activity"></td>
-        </tr>
-        <tr>
-          <td class="lbl">Travel is on:</td>
-          <td class="val center" colspan="2">
-            <span class="chk" id="v-chk-business">&#9744;</span>Official Business
-            &nbsp;&nbsp;&nbsp;&nbsp;
-            <span class="chk" id="v-chk-official-time">&#9744;</span>Official Time
-          </td>
-        </tr>
-        <tr>
-          <td class="lbl">Legal basis:</td>
-          <td class="val" colspan="2">
-            <div class="chk-line"><span class="chk" id="v-chk-deped-memo">&#9744;</span> DepEd Memo
-              &nbsp;&nbsp;&nbsp;&nbsp;<span class="chk" id="v-chk-deped-advisory">&#9744;</span>DepED Advisory</div>
-            <div class="chk-line"><span class="chk" id="v-chk-invitation">&#9744;</span> Invitation Letter
-              &nbsp;&nbsp;&nbsp;&nbsp;<span class="chk" id="v-chk-legal-others">&#9744;</span>Others: <span class="fill-blank" id="v-legal-others-text"></span></div>
-          </td>
-        </tr>
-        <tr>
-          <td class="lbl">Expenses covered:<span class="sub">(subject to the usual accounting and auditing rules and regulations)</span></td>
-          <td class="val" colspan="2" id="v-expenses-covered"></td>
-        </tr>
-        <tr>
-          <td class="lbl">Fund source:</td>
-          <td class="val" colspan="2">
-            <div class="chk-line"><span class="chk" id="v-chk-local-funds">&#9744;</span> Local Funds
-              &nbsp;&nbsp;&nbsp;&nbsp;<span class="chk" id="v-chk-sub-aro">&#9744;</span>Sub-ARO No.: <span class="fill-blank" id="v-sub-aro-no"></span></div>
-            <div class="chk-line"><span class="chk" id="v-chk-hrtd">&#9744;</span> HRTD
-              &nbsp;&nbsp;&nbsp;&nbsp;<span class="chk" id="v-chk-fund-others">&#9744;</span> Others: <span class="fill-blank" id="v-fund-others-text"></span></div>
-          </td>
-        </tr>
-        <tr>
-          <td class="shade" colspan="3">Check/Tick if applicable:</td>
-        </tr>
-        <tr>
-          <td class="val center" colspan="3">
-            <span class="chk" id="v-chk-gov-vehicle">&#9744;</span> With Government Vehicle
-            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-            <span class="chk" id="v-chk-reg-fee">&#9744;</span> With Registration Fee
-          </td>
-        </tr>
+        <tr><td class="lbl">Host of Activity</td><td class="val" id="v-host"></td></tr>
+        <tr><td class="lbl">Inclusive Dates</td><td class="val" id="v-dates"></td></tr>
+        <tr><td class="lbl">Destination</td><td class="val" id="v-destination"></td></tr>
+        <tr><td class="lbl">Fund Source</td><td class="val" id="v-fund-source"></td></tr>
       </tbody>
     </table>
 
-    <table class="approval-table">
-      <colgroup><col><col></colgroup>
-      <tbody>
-        <tr><th>Recommending Approval:</th><th>Approved:</th></tr>
-        <tr>
-          <td class="appr-cell" id="v-recommend-cell"></td>
-          <td class="appr-cell" id="v-approved-cell"></td>
-        </tr>
-      </tbody>
-    </table>
-
-    <div class="doc-footer-block">
-      <img class="logo" src="assets/office-logo.svg" alt="Office Logo">
-      <div class="footer-text">
-        <div><strong>Address:</strong> Brgy. Domang, Dupax del Sur, Nueva Vizcaya</div>
-        <div><strong>Telephone Nos.:</strong> 09750080893</div>
-        <div><strong>Email Address:</strong> dupaxdelsurdistrict@gmail.com</div>
+    <div class="attest-block">
+      <p class="attest-text">I hereby attest that the information in this form and in the supporting documents attached hereto are true and correct.</p>
+      <div class="sign-row">
+        <div class="sign-col-name">
+          <div class="sig-img-wrap"></div>
+          <div class="sig-line"><span class="sig-caption">Name and Signature of Employee</span></div>
+          <div id="v-employee-sig-name" style="font-weight:700; margin-top:2px;"></div>
+        </div>
+        <div class="sign-col-date">
+          <div class="sig-line" id="v-employee-sig-date"></div>
+          <span class="sig-caption">Date</span>
+        </div>
       </div>
     </div>
 
+    <div class="attest-block">
+      <p class="attest-text">This is to certify that the trip of the requesting employee satisfies all the minimum conditions for authorized official travel and that alternatives to travel are sufficient purpose stated herein.</p>
+      <div class="sign-row">
+        <div class="sign-col-name">
+          <div class="sig-img-wrap" id="v-recommend-sig-img"></div>
+          <div class="sig-line"><span class="sig-name" id="v-recommend-name">&nbsp;</span></div>
+          <div class="sig-role" id="v-recommend-role"></div>
+        </div>
+        <div class="sign-col-date">
+          <div class="sig-line" id="v-recommend-date">&nbsp;</div>
+          <span class="sig-caption">Date</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="attest-block">
+      <p class="approved-label">APPROVED</p>
+      <div class="sign-row">
+        <div class="sign-col-name">
+          <div class="sig-img-wrap" id="v-approved-sig-img"></div>
+          <div class="sig-line"><span class="sig-name" id="v-approved-name">&nbsp;</span></div>
+          <div class="sig-role" id="v-approved-role"></div>
+        </div>
+        <div class="sign-col-date">
+          <div class="sig-line" id="v-approved-date">&nbsp;</div>
+          <span class="sig-caption">Date</span>
+        </div>
+      </div>
+    </div>
+
+      <div class="doc-footer-block">
+        <div class="footer-line address"><span class="dot"></span><strong>Address:</strong><span class="fv">Quezon St., Don Domingo Maddela, Bayombong, Nueva Vizcaya, 3700</span></div>
+        <div class="footer-line phone"><span class="dot"></span><strong>Cellphone No:</strong><span class="fv">+63 962 681 4945 &bull; +63 992 035 2123</span></div>
+        <div class="footer-line email"><span class="dot"></span><strong>Email Address:</strong><span class="fv">nuevavizcaya@deped.gov.ph</span></div>
+        <div class="footer-line website"><span class="dot"></span><strong>Website:</strong><span class="fv">https://sdonuevavizcaya.com/</span></div>
+        <div class="footer-logos">
+          <img src="assets/deped-logo.svg" alt="DepEd Logo">
+          <img src="assets/bagong-pilipinas-logo.svg" alt="Bagong Pilipinas Logo">
+          <img src="assets/agency-seal.svg" alt="Division Seal">
+        </div>
+      </div>
+
+    <!-- Supporting documents attached by the employee. Shown alongside the
+         official form (not part of its fixed layout) so anyone viewing or
+         printing this page sees both together, per the form's own
+         requirement that Purpose of Travel "must be supported by
+         attachments." -->
+    <div class="attachments-section" id="v-attachments-section" style="display:none">
+      <div class="section-title">Attachments</div>
+      <div id="v-attachments-body"></div>
+    </div>
+
     <!-- System-generated approval trail — supplements, does not replace, the
-         two official signature blocks above. Useful when there are more than
-         two approval levels configured for an official station. -->
+         official attestation/certification/approval blocks above. Useful
+         when a station has more than the two configured approval roles. -->
     <div class="approval-log">
       <div class="section-title">Approval History (system record)</div>
       <table class="log-table">

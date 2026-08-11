@@ -22,15 +22,23 @@ att-system/
 │   ├── config.js         Supabase URL/anon key (edit this)
 │   ├── supabaseClient.js Shared Supabase client
 │   ├── utils.js           Shared helpers (auth guard, shell, toasts, modals)
+│   ├── attachments.js    Shared upload/list/delete/signed-URL helpers
 │   ├── auth.js, employee.js, approver.js, admin.js, report.js
+├── assets/                Seal/logo placeholders — replace with real images
 └── sql/
     ├── schema.sql          Full Postgres schema, RLS policies, storage bucket
     ├── migration_division_to_official_station.sql
     │                       Run ONCE if you already deployed the earlier
     │                       "Division"-based schema — see Section 2.
-    └── migration_add_approval_type.sql
-                            Run ONCE if you deployed before Approval Type
-                            (Recommending Approval / Approving Authority)
+    ├── migration_add_approval_type.sql
+    │                       Run ONCE if you deployed before Approval Type
+    │                       (Recommending Approval / Approving Authority)
+    │                       existed — see Section 2.
+    ├── migration_fund_source_and_new_fields.sql
+    │                       Run ONCE if your travel_orders table predates
+    │                       the DepEd-form field redesign — see Section 2.
+    └── migration_add_attachments.sql
+                            Run ONCE if you deployed before attachments
                             existed — see Section 2.
 ```
 
@@ -61,6 +69,24 @@ Supabase schema.
 > level number per station → Approving Authority, everything else →
 > Recommending Approval); review and correct those in **Admin → Approval
 > Levels** afterward.
+
+> **Seeing blank/wrong Fund Source or Legal Basis on the report, or a "Save
+> failed: Could not find the '...' column" error?** Your `travel_orders`
+> table predates the request-form redesign to match the official DepEd
+> form. Run `sql/migration_fund_source_and_new_fields.sql` once in the SQL
+> Editor — it drops the old `travel_classification` / `expenses` /
+> `transportation` columns, converts `fund_source` and `legal_basis` from
+> TEXT to JSONB (checkbox data), and adds `companions`, `travel_on`,
+> `expenses_covered`, `with_government_vehicle`, and
+> `with_registration_fee`. Any existing draft/pending requests will need to
+> be re-opened and re-saved afterward to populate the new fields — their
+> old Fund Source/Legal Basis text values don't carry over automatically
+> since the shape changed.
+
+> **Already deployed and just need attachments?** Run
+> `sql/migration_add_attachments.sql` once in the SQL Editor. It adds the
+> `travel_order_attachments` table and a private `attachments` Storage
+> bucket with RLS. See Section 8.
 
 
 1. Create a project at https://supabase.com.
@@ -141,68 +167,64 @@ admins have full access.
 
 ## 6. The official report (`report.html`)
 
-`report.html` + `css/report.css` reproduce the agency's actual **Authority to
-Travel** form (DepEd Region II – Cagayan Valley, Schools Division of Nueva
-Vizcaya, Dupax Del Sur District) field-for-field: the letterhead block, the
-Name / Position / Signature table (with two blank companion rows, matching
-the paper form), Official Station, Destination, Date of travel, Purpose,
-Activity organized/sponsored by, the "Travel is on" checkboxes, Legal basis
-checkboxes, Expenses covered, Fund source checkboxes, the Government
-Vehicle / Registration Fee checkboxes, and the two-column Recommending
-Approval / Approved signature block — same labels, same order, same borders.
+`report.html` + `css/report.css` reproduce the Schools Division of Nueva
+Vizcaya's **"Travel Authority for Official Travel"** form field-for-field:
+the letterhead (Republic of the Philippines / Department of Education /
+Region II – Cagayan Valley / Schools Division of Nueva Vizcaya), the single
+field table (Name, Position/Designation, Permanent Station, Purpose of
+Travel, Host of Activity, Inclusive Dates, Destination, Fund Source), and
+the three stacked attestation/certification/approval blocks — same wording,
+same order, same borders.
 
 `js/report.js` only ever writes into elements with `id="v-*"`; it never
 restructures the markup. Mapping to the brief's variables:
 
 | Variable | Element id |
 |---|---|
-| `{{date_filing}}` | `v-filing-date` |
 | `{{employee_name}}` | `v-employee-name` |
 | `{{position}}` | `v-position` |
-| `{{official_station}}` | `v-official-station` |
+| `{{official_station}}` | `v-station` ("Permanent Station" on this template) |
 | `{{destination}}` | `v-destination` |
-| `{{travel_date}}` | `v-travel-date` |
+| `{{travel_date}}` | `v-dates` ("Inclusive Dates") |
 | `{{purpose}}` | `v-purpose` |
-| `{{activity_sponsor}}` | `v-activity` |
-| `{{approver_name}}` / `{{approver_position}}` / `{{approver_signature}}` / `{{approval_date}}` | built into `v-recommend-cell` (Recommending Approval) and `v-approved-cell` (Approving Authority) |
+| `{{activity_sponsor}}` | `v-host` ("Host of Activity") |
+| — (new field) | `v-fund-source` — plain text, summarized from the `fund_source` data collected on the request |
+| `{{approver_name}}` / `{{approver_position}}` / `{{approver_signature}}` / `{{approval_date}}` | built into the "certify" block (`v-recommend-*`) and "APPROVED" block (`v-approved-*`) |
 
-**Checkboxes** (`☐` → `☒`) are driven by real data instead of free text:
-`travel_on`, `legal_basis` (deped_memo / deped_advisory / invitation_letter /
-others+text), `fund_source` (local_funds / sub_aro+no / hrtd / others+text),
-`with_government_vehicle`, `with_registration_fee`.
+**Three signature blocks, not two side-by-side boxes.** This template
+stacks them vertically instead:
+1. **Employee attestation** — an italic "I hereby attest…" paragraph, then
+   the employee's name (auto-filled — we know it) on the signature line.
+   The actual wet signature still happens on the printed copy; this system
+   doesn't collect employee e-signatures, only approver e-signatures.
+2. **Certification / Recommending Approval** — the "This is to certify…"
+   paragraph, then whichever approver is configured with Approval Type
+   `recommending` for that station prints their name, position, signature
+   image, and decision date directly (not behind a blank captioned line —
+   these are standing roles, same as how the real template has the
+   Assistant Schools Division Superintendent's name pre-typed).
+3. **APPROVED** — same idea, for whichever approver has Approval Type
+   `approving`.
 
-**Two official signature slots, by explicit role — not level position.** The
-paper form only has two signature boxes ("Recommending Approval" and
-"Approved"). Which approver's signature lands in which box is decided by the
-**Approval Type** you set on each Approval Level in Admin (Section 4) —
-`recommending` → left box, `approving` → right box — not by whether it's
-Level 1 or Level 2. This is snapshotted onto `approval_history` at the
-moment of the decision (same as the signature image), so it stays fixed even
-if you later reconfigure a station's levels. If a station has 3+ levels,
-every level's action is still fully recorded in the "Approval History
-(system record)" table appended below the official face — nothing is lost,
-but the two-box layout itself is never altered.
+Same rule as before: neither block is required. If a station only has one
+role configured, the other simply stays blank — no misleading "pending"
+state once the request is fully decided. If you want an approver's name to
+print with credentials exactly like the sample (e.g. "ADONIS C. CEPEREZ
+EdD, CESE"), just include that in their **Full Name** field in Admin →
+Employees — the report prints whatever's there.
 
-The template is fixed at **Letter size (8.5in × 11in)**, matching the
-official form, and print CSS hides the on-screen toolbar automatically.
+The template is fixed at **Letter size (8.5in × 11in)**, and print CSS hides
+the on-screen toolbar automatically.
 
 **Letterhead & branding — one-time edits, not per-request variables:**
-- Agency name, Region, Division (as in the DepEd org name, e.g. "Schools
-  Division of Nueva Vizcaya" — this is letterhead text, unrelated to the
-  app's Official Station routing concept), District, and address/telephone/
-  email are
-  written directly in `report.html` / near the bottom of the same file.
-  Edit them once for your office.
-- `assets/agency-seal.svg` (top, 64×64 rendered) and `assets/office-logo.svg`
-  (footer, 54×54 rendered) are placeholders — replace those two files with
-  your actual seal/logo images (PNG or SVG, same filenames, or update the
-  `src` in `report.html`).
-- The header currently uses the Google Fonts "UnifrakturCook" typeface for
-  "Department of Education" to approximate the blackletter/Old-English style
-  on the sample form, and "IM Fell English SC" for "Republic of the
-  Philippines". Requires internet access when printing; swap the `<link>` in
-  `report.html`'s `<head>` for a self-hosted font if offline printing is
-  required.
+- Agency name, Region, Division, and the footer address/cellphone/email/
+  website are written directly in `report.html`. Edit them once for your
+  office.
+- `assets/agency-seal.svg` (header, and reused as the third footer logo),
+  `assets/deped-logo.svg`, and `assets/bagong-pilipinas-logo.svg` are
+  placeholders — replace those three files with your actual seal/logo
+  images (PNG or SVG, same filenames, or update the `src` attributes in
+  `report.html`).
 
 **Password-protected PDF download.** Next to "Print / Save as PDF" is a
 **"Download PDF (password-protected)"** button. Clicking it asks you to set
@@ -223,10 +245,7 @@ not). There's no backend involved, so:
   pin a different `jspdf` version or swap in a server-side PDF encryption
   step (e.g. `qpdf --encrypt` in a small backend function) for guaranteed
   compatibility.
-- If a request has a lot of content and the rendered image doesn't fit
-  cleanly on one Letter page, the current implementation stretches it to
-  fill exactly one page — extend `generateEncryptedPdf()` in `js/report.js`
-  with multi-page slicing if you expect longer documents.
+
 
 ## 7. Companions field
 
@@ -235,7 +254,51 @@ additional travelers on the same authority. The employee request form lets
 you add up to two companions (name + position); they print into those exact
 rows on the report.
 
-## 8. Responsive behavior
+## 8. Attachments (supporting documents)
+
+The official form requires Purpose of Travel to be "supported by
+attachments." Employees can attach files (PDF, JPG/PNG, DOC/DOCX, XLS/XLSX,
+max 10MB each) to their own request:
+
+- **Filing a new request**: the Attachments section unlocks after the first
+  Save Draft — the form stays open (doesn't close) so you can attach files
+  immediately without reopening it.
+- **Editing an existing draft/returned request**: attachments are available
+  as soon as you open it.
+- Files live in a **private** Storage bucket (`attachments`, not public like
+  `signatures`) — every view/download goes through a short-lived signed URL,
+  and Row Level Security decides who can even request one.
+
+**Who can see what**, enforced by RLS (mirrors exactly who can already see
+the request itself — nothing new to configure):
+- The employee who filed the request — full access (view, add, remove,
+  while it's still Draft or Returned).
+- Whichever approver is currently assigned to act on it — view only.
+- Admins — view only (uploading/removing is the employee's job, matching
+  how the rest of the system treats request ownership).
+
+**Where attachments show up:**
+- Employee's own "View" detail modal (view-only)
+- Approver's review modal (view-only, alongside the request details they're
+  deciding on)
+- Admin's request-view modal (view-only)
+- **`report.html`** — shown directly on the report page below the official
+  form (images and PDFs get an inline preview; other file types get a
+  view/download link), so opening the report shows both the ATT form and
+  its supporting documents together, per the form's own requirement.
+
+**Downloading:** the report page has two independent download buttons —
+**"Download PDF (password-protected)"** for the ATT form itself (as
+before), and **"Download Attachments"** which downloads every attached
+file individually (each browser download fires ~400ms apart to avoid
+pop-up/download blockers). Click both for "give me everything." Note that
+image attachments are also visually captured *inside* the encrypted PDF
+itself (since the html2canvas snapshot includes the whole page), so a
+single password-protected PDF download already includes inline images —
+non-image attachments (PDFs, Office docs) still need the separate
+"Download Attachments" button for full-fidelity originals.
+
+## 9. Responsive behavior
 
 - **Desktop (>1080px):** persistent sidebar + content area.
 - **Tablet (860–1080px):** narrower sidebar, 2-column forms.
@@ -246,7 +309,7 @@ rows on the report.
   always renders at its fixed paper size, since it's meant for printing/PDF,
   not for on-screen mobile reading.
 
-## 9. Known MVP limitations / next steps for production
+## 10. Known MVP limitations / next steps for production
 
 - No password-reset UI wired up (Supabase Auth supports it; add a page).
 - No email notifications on submit/approve/reject/return (add Supabase Edge
@@ -257,10 +320,11 @@ rows on the report.
   for production).
 - The control-number sequence (`next_control_no()`) is global; if your agency
   numbers per-station or per-year-and-station, adjust the SQL function.
-- The report's agency seal (`assets/agency-seal.svg`) and office logo
-  (`assets/office-logo.svg`) are still placeholder graphics — drop in your
-  real image files (see Section 6) before printing for real use.
-- The official form only shows 2 signature boxes; official stations with 3+ approval
-  levels still get every action logged in the system-record table below the
-  form, but only Level 1 and the final level get a dedicated printed
-  signature box (see Section 6).
+- The report's seal/logo images (`assets/agency-seal.svg`,
+  `assets/deped-logo.svg`, `assets/bagong-pilipinas-logo.svg`) are still
+  placeholder graphics — drop in your real image files (see Section 6)
+  before printing for real use.
+- The template only shows 2 named-approver blocks (Recommending Approval,
+  Approved); stations with 3+ approval levels still get every action logged
+  in the system-record table below the form, but only the `recommending`-
+  and `approving`-typed levels get a dedicated printed block (see Section 6).

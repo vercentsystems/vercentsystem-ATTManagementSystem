@@ -3,6 +3,7 @@ import {
   requireRole, renderShell, getAccessibleDestinations, toast, fmtDate, escapeHtml,
   statusBadge, openModal, closeModal, wireModalDismiss, qs, qsa,
 } from "./utils.js";
+import { listAttachments, renderAttachmentsList } from "./attachments.js";
 
 function legalBasisText(lb) {
   if (!lb) return "—";
@@ -241,6 +242,8 @@ async function openReview(id) {
         [o.with_government_vehicle ? "With Government Vehicle" : null, o.with_registration_fee ? "With Registration Fee" : null].filter(Boolean).join(" · ") || "—"
       }</div></div>
     </div>
+    <h4 style="margin-top:14px">Attachments</h4>
+    <div id="review-attachments"><p class="muted">Loading…</p></div>
     <h4 style="margin-top:14px">Prior Approval History</h4>
     ${(history && history.length) ? `<ul class="timeline">${history.map(h => `
       <li><div class="tl-dot ${h.action}">${h.action === "approved" ? "✓" : h.action === "rejected" ? "✕" : "↺"}</div>
@@ -249,6 +252,10 @@ async function openReview(id) {
         ${h.remarks ? `<div class="remarks">${escapeHtml(h.remarks)}</div>` : ""}</div></li>`).join("")}</ul>`
       : `<p class="muted">This is the first approval action on this request.</p>`}
   `;
+
+  listAttachments(id)
+    .then(files => renderAttachmentsList(document.getElementById("review-attachments"), files, { editable: false }))
+    .catch(() => { document.getElementById("review-attachments").innerHTML = `<p class="muted">Failed to load attachments.</p>`; });
 }
 
 function askRemarks(action, required) {

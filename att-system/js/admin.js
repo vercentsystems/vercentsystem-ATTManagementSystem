@@ -4,6 +4,7 @@ import {
   requireRole, renderShell, getAccessibleDestinations, toast, fmtDate, escapeHtml,
   statusBadge, openModal, closeModal, wireModalDismiss, qs, qsa,
 } from "./utils.js";
+import { listAttachments, renderAttachmentsList } from "./attachments.js";
 
 function legalBasisText(lb) {
   if (!lb) return "—";
@@ -235,6 +236,8 @@ async function viewRequest(id) {
       <div class="field full"><label>Legal Basis</label><div>${legalBasisText(o.legal_basis)}</div></div>
       <div class="field full"><label>Fund Source</label><div>${fundSourceText(o.fund_source)}</div></div>
     </div>
+    <h4 style="margin-top:14px">Attachments</h4>
+    <div id="rq-attachments"><p class="muted">Loading…</p></div>
     <h4 style="margin-top:14px">Approval History</h4>
     ${(history && history.length) ? `<ul class="timeline">${history.map(h => `
       <li><div class="tl-dot ${h.action}">${h.action === "approved" ? "✓" : h.action === "rejected" ? "✕" : "↺"}</div>
@@ -242,6 +245,11 @@ async function viewRequest(id) {
         <div class="meta">Level ${h.level_no} · ${h.action.toUpperCase()} · ${fmtDate(h.action_date)}</div>
         ${h.remarks ? `<div class="remarks">${escapeHtml(h.remarks)}</div>` : ""}</div></li>`).join("")}</ul>` : `<p class="muted">No approval activity yet.</p>`}
   `;
+
+  listAttachments(id)
+    .then(files => renderAttachmentsList(document.getElementById("rq-attachments"), files, { editable: false }))
+    .catch(() => { document.getElementById("rq-attachments").innerHTML = `<p class="muted">Failed to load attachments.</p>`; });
+
   foot.innerHTML = o.status === "approved" ? `<a class="btn btn-gold" href="report.html?id=${o.id}" target="_blank">View / Print Official Report</a>` : "";
 }
 

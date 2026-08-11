@@ -1,7 +1,9 @@
 import { sb } from "./supabaseClient.js";
 import { requireRole, fmtDate, fmtDateTime, escapeHtml } from "./utils.js";
+import { listAttachments, getSignedUrl, isImageType, isPdfType, fmtFileSize } from "./attachments.js";
 
 let CURRENT_ORDER = null;
+let CURRENT_ATTACHMENTS = [];
 
 init();
 
@@ -43,6 +45,7 @@ async function init() {
 
   document.getElementById("btn-print").addEventListener("click", () => window.print());
   wireDownloadModal();
+  await loadAndRenderAttachments(id);
 }
 
 // The role label (e.g. "Assistant Schools Division Superintendent") is a
@@ -172,6 +175,99 @@ function buildLog(history) {
         <td>${escapeHtml(h.remarks || "—")}</td>
       </tr>`).join("")
     : `<tr><td colspan="6" style="text-align:center;color:#555">No approval activity yet</td></tr>`;
+}
+
+/* ------------------------------ Attachments ------------------------------ */
+// Displays the employee's supporting documents alongside the official form
+// on this same page (per the form's own "must be supported by attachments"
+// requirement), and enables downloading them independently of the ATT form
+// PDF itself — approvers/admins can already view each file via a signed
+// URL (enforced by the attachments bucket's RLS), same as on the review
+// screens.
+async function loadAndRenderAttachments(travelOrderId) {
+  const section = document.getElementById("v-attachments-section");
+  const body = document.getElementById("v-attachments-body");
+  const downloadBtn = document.getElementById("btn-download-attachments");
+
+  let files = [];
+  try {
+    files = await listAttachments(travelOrderId);
+  } catch (err) {
+    return; // no attachments table/access — quietly show nothing rather than error out the whole report
+  }
+  CURRENT_ATTACHMENTS = files;
+
+  if (!files.length) {
+    section.style.display = "none";
+    downloadBtn.style.display = "none";
+    return;
+  }
+
+  section.style.display = "block";
+  downloadBtn.style.display = "inline-block";
+  downloadBtn.addEventListener("click", downloadAllAttachments);
+
+  body.innerHTML = files.map((f, i) => `
+    <div class="attach-item" data-index="${i}">
+      <div class="attach-head">
+        <span class="name" title="${escapeHtml(f.file_name)}">${escapeHtml(f.file_name)} <span style="font-weight:400;color:#666">(${fmtFileSize(f.file_size)})</span></span>
+        <a href="#" class="attach-view-link" data-index="${i}">View / Download</a>
+      </div>
+      <div class="attach-preview" id="attach-preview-${i}">
+        <span class="no-preview">Loading preview…</span>
+        <span class="print-only-note">Attachment: ${escapeHtml(f.file_name)} — view online to see this file.</span>
+      </div>
+    </div>
+  `).join("");
+
+  // Resolve a signed URL per file — for the inline preview (images/PDFs)
+  // and for the header "View / Download" link.
+  await Promise.all(files.map(async (f, i) => {
+    const previewEl = document.getElementById(`attach-preview-${i}`);
+    const linkEl = body.querySelector(`.attach-view-link[data-index="${i}"]`);
+    try {
+      const url = await getSignedUrl(f.file_path);
+      if (linkEl) {
+        linkEl.href = url;
+        linkEl.target = "_blank";
+        linkEl.rel = "noopener";
+      }
+      if (isImageType(f.file_type)) {
+        previewEl.innerHTML = `<img src="${url}" alt="${escapeHtml(f.file_name)}">
+          <span class="print-only-note">Attachment: ${escapeHtml(f.file_name)}</span>`;
+      } else if (isPdfType(f.file_type)) {
+        previewEl.innerHTML = `<iframe src="${url}" title="${escapeHtml(f.file_name)}"></iframe>
+          <span class="print-only-note">Attachment (PDF): ${escapeHtml(f.file_name)} — view online to see this file.</span>`;
+      } else {
+        previewEl.innerHTML = `<span class="no-preview">No inline preview for this file type — use "View / Download" above.</span>`;
+      }
+    } catch (err) {
+      previewEl.innerHTML = `<span class="no-preview">Could not load preview.</span>`;
+    }
+  }));
+}
+
+async function downloadAllAttachments() {
+  const btn = document.getElementById("btn-download-attachments");
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = "Downloading…";
+  try {
+    for (const f of CURRENT_ATTACHMENTS) {
+      const url = await getSignedUrl(f.file_path);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = f.file_name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // Small stagger so browsers don't block a burst of simultaneous downloads.
+      await new Promise(r => setTimeout(r, 400));
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
 }
 
 /* ------------------------- Password-protected download ------------------ */
