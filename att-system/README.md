@@ -141,64 +141,68 @@ admins have full access.
 
 ## 6. The official report (`report.html`)
 
-`report.html` + `css/report.css` reproduce the Schools Division of Nueva
-Vizcaya's **"Travel Authority for Official Travel"** form field-for-field:
-the letterhead (Republic of the Philippines / Department of Education /
-Region II – Cagayan Valley / Schools Division of Nueva Vizcaya), the single
-field table (Name, Position/Designation, Permanent Station, Purpose of
-Travel, Host of Activity, Inclusive Dates, Destination, Fund Source), and
-the three stacked attestation/certification/approval blocks — same wording,
-same order, same borders.
+`report.html` + `css/report.css` reproduce the agency's actual **Authority to
+Travel** form (DepEd Region II – Cagayan Valley, Schools Division of Nueva
+Vizcaya, Dupax Del Sur District) field-for-field: the letterhead block, the
+Name / Position / Signature table (with two blank companion rows, matching
+the paper form), Official Station, Destination, Date of travel, Purpose,
+Activity organized/sponsored by, the "Travel is on" checkboxes, Legal basis
+checkboxes, Expenses covered, Fund source checkboxes, the Government
+Vehicle / Registration Fee checkboxes, and the two-column Recommending
+Approval / Approved signature block — same labels, same order, same borders.
 
 `js/report.js` only ever writes into elements with `id="v-*"`; it never
 restructures the markup. Mapping to the brief's variables:
 
 | Variable | Element id |
 |---|---|
+| `{{date_filing}}` | `v-filing-date` |
 | `{{employee_name}}` | `v-employee-name` |
 | `{{position}}` | `v-position` |
-| `{{official_station}}` | `v-station` ("Permanent Station" on this template) |
+| `{{official_station}}` | `v-official-station` |
 | `{{destination}}` | `v-destination` |
-| `{{travel_date}}` | `v-dates` ("Inclusive Dates") |
+| `{{travel_date}}` | `v-travel-date` |
 | `{{purpose}}` | `v-purpose` |
-| `{{activity_sponsor}}` | `v-host` ("Host of Activity") |
-| — (new field) | `v-fund-source` — plain text, summarized from the `fund_source` data collected on the request |
-| `{{approver_name}}` / `{{approver_position}}` / `{{approver_signature}}` / `{{approval_date}}` | built into the "certify" block (`v-recommend-*`) and "APPROVED" block (`v-approved-*`) |
+| `{{activity_sponsor}}` | `v-activity` |
+| `{{approver_name}}` / `{{approver_position}}` / `{{approver_signature}}` / `{{approval_date}}` | built into `v-recommend-cell` (Recommending Approval) and `v-approved-cell` (Approving Authority) |
 
-**Three signature blocks, not two side-by-side boxes.** This template
-stacks them vertically instead:
-1. **Employee attestation** — an italic "I hereby attest…" paragraph, then
-   the employee's name (auto-filled — we know it) on the signature line.
-   The actual wet signature still happens on the printed copy; this system
-   doesn't collect employee e-signatures, only approver e-signatures.
-2. **Certification / Recommending Approval** — the "This is to certify…"
-   paragraph, then whichever approver is configured with Approval Type
-   `recommending` for that station prints their name, position, signature
-   image, and decision date directly (not behind a blank captioned line —
-   these are standing roles, same as how the real template has the
-   Assistant Schools Division Superintendent's name pre-typed).
-3. **APPROVED** — same idea, for whichever approver has Approval Type
-   `approving`.
+**Checkboxes** (`☐` → `☒`) are driven by real data instead of free text:
+`travel_on`, `legal_basis` (deped_memo / deped_advisory / invitation_letter /
+others+text), `fund_source` (local_funds / sub_aro+no / hrtd / others+text),
+`with_government_vehicle`, `with_registration_fee`.
 
-Same rule as before: neither block is required. If a station only has one
-role configured, the other simply stays blank — no misleading "pending"
-state once the request is fully decided. If you want an approver's name to
-print with credentials exactly like the sample (e.g. "ADONIS C. CEPEREZ
-EdD, CESE"), just include that in their **Full Name** field in Admin →
-Employees — the report prints whatever's there.
+**Two official signature slots, by explicit role — not level position.** The
+paper form only has two signature boxes ("Recommending Approval" and
+"Approved"). Which approver's signature lands in which box is decided by the
+**Approval Type** you set on each Approval Level in Admin (Section 4) —
+`recommending` → left box, `approving` → right box — not by whether it's
+Level 1 or Level 2. This is snapshotted onto `approval_history` at the
+moment of the decision (same as the signature image), so it stays fixed even
+if you later reconfigure a station's levels. If a station has 3+ levels,
+every level's action is still fully recorded in the "Approval History
+(system record)" table appended below the official face — nothing is lost,
+but the two-box layout itself is never altered.
 
-The template is fixed at **Letter size (8.5in × 11in)**, and print CSS hides
-the on-screen toolbar automatically.
+The template is fixed at **Letter size (8.5in × 11in)**, matching the
+official form, and print CSS hides the on-screen toolbar automatically.
 
 **Letterhead & branding — one-time edits, not per-request variables:**
-- Agency name, Region, Division, and the footer address/cellphone/email/
-  website are written directly in `report.html`. Edit them once for your
-  office.
-- `assets/agency-seal.svg` (header, and reused as the third footer logo),
-  `assets/deped-logo.svg`, and `assets/bagong-pilipinas-logo.svg` are
-  placeholders — replace those three files with your actual seal/logo
-  images (PNG or SVG, same filenames, or update the `src` attributes in
-  `report.html`).
+- Agency name, Region, Division (as in the DepEd org name, e.g. "Schools
+  Division of Nueva Vizcaya" — this is letterhead text, unrelated to the
+  app's Official Station routing concept), District, and address/telephone/
+  email are
+  written directly in `report.html` / near the bottom of the same file.
+  Edit them once for your office.
+- `assets/agency-seal.svg` (top, 64×64 rendered) and `assets/office-logo.svg`
+  (footer, 54×54 rendered) are placeholders — replace those two files with
+  your actual seal/logo images (PNG or SVG, same filenames, or update the
+  `src` in `report.html`).
+- The header currently uses the Google Fonts "UnifrakturCook" typeface for
+  "Department of Education" to approximate the blackletter/Old-English style
+  on the sample form, and "IM Fell English SC" for "Republic of the
+  Philippines". Requires internet access when printing; swap the `<link>` in
+  `report.html`'s `<head>` for a self-hosted font if offline printing is
+  required.
 
 **Password-protected PDF download.** Next to "Print / Save as PDF" is a
 **"Download PDF (password-protected)"** button. Clicking it asks you to set
@@ -219,7 +223,10 @@ not). There's no backend involved, so:
   pin a different `jspdf` version or swap in a server-side PDF encryption
   step (e.g. `qpdf --encrypt` in a small backend function) for guaranteed
   compatibility.
-
+- If a request has a lot of content and the rendered image doesn't fit
+  cleanly on one Letter page, the current implementation stretches it to
+  fill exactly one page — extend `generateEncryptedPdf()` in `js/report.js`
+  with multi-page slicing if you expect longer documents.
 
 ## 7. Companions field
 
@@ -250,11 +257,10 @@ rows on the report.
   for production).
 - The control-number sequence (`next_control_no()`) is global; if your agency
   numbers per-station or per-year-and-station, adjust the SQL function.
-- The report's seal/logo images (`assets/agency-seal.svg`,
-  `assets/deped-logo.svg`, `assets/bagong-pilipinas-logo.svg`) are still
-  placeholder graphics — drop in your real image files (see Section 6)
-  before printing for real use.
-- The template only shows 2 named-approver blocks (Recommending Approval,
-  Approved); stations with 3+ approval levels still get every action logged
-  in the system-record table below the form, but only the `recommending`-
-  and `approving`-typed levels get a dedicated printed block (see Section 6).
+- The report's agency seal (`assets/agency-seal.svg`) and office logo
+  (`assets/office-logo.svg`) are still placeholder graphics — drop in your
+  real image files (see Section 6) before printing for real use.
+- The official form only shows 2 signature boxes; official stations with 3+ approval
+  levels still get every action logged in the system-record table below the
+  form, but only Level 1 and the final level get a dedicated printed
+  signature box (see Section 6).
